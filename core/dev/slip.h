@@ -83,4 +83,11 @@ void slip_set_input_callback(void (*callback)(void));
 void slip_arch_init(unsigned long ubr);
 void slip_arch_writeb(unsigned char c);
 
+#if SINK_ADDITION
+void slip_add_input_bytes(uint16_t value);
+uint32_t slip_get_input_bytes(void);
+void slip_add_output_bytes(uint16_t value);
+uint32_t slip_get_output_bytes(void);
+#endif
+
 #endif /* SLIP_H_ */

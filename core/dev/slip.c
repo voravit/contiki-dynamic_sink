@@ -87,6 +87,35 @@ static uint16_t pkt_end;		/* SLIP_END tracker. */
 
 static void (* input_callback)(void) = NULL;
 /*---------------------------------------------------------------------------*/
+#if SINK_ADDITION
+static uint32_t slip_in = 0;
+static uint32_t slip_out = 0;
+/*---------------------------------------------------------------------------*/
+void
+slip_add_input_bytes(uint16_t value)
+{
+  slip_in+=(uint32_t)value;
+}
+/*---------------------------------------------------------------------------*/
+uint32_t
+slip_get_input_bytes(void)
+{
+  return slip_in;
+}
+/*---------------------------------------------------------------------------*/
+void
+slip_add_output_bytes(uint16_t value)
+{
+  slip_out+=(uint32_t)value;
+}
+/*---------------------------------------------------------------------------*/
+uint32_t
+slip_get_output_bytes(void)
+{
+  return slip_out;
+}
+#endif /* SINK_ADDITION */
+/*---------------------------------------------------------------------------*/
 void
 slip_set_input_callback(void (*c)(void))
 {
@@ -373,6 +402,9 @@ PROCESS_THREAD(slip_process, ev, data)
       if(input_callback) {
         input_callback();
       }
+#if SINK_ADDITION
+      slip_add_input_bytes(uip_len);
+#endif
 #ifdef SLIP_CONF_TCPIP_INPUT
       SLIP_CONF_TCPIP_INPUT();
 #else
