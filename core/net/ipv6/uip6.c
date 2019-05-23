@@ -1574,7 +1574,11 @@ uip_process(uint8_t flag)
   UIP_UDP_BUF->destport = uip_udp_conn->rport;
 
   uip_ipaddr_copy(&UIP_IP_BUF->destipaddr, &uip_udp_conn->ripaddr);
+#if SINK_ADDITION
+  uip_ipaddr_copy(&UIP_IP_BUF->srcipaddr, rpl_get_src_addr());
+#else
   uip_ds6_select_src(&UIP_IP_BUF->srcipaddr, &UIP_IP_BUF->destipaddr);
+#endif
 
   uip_appdata = &uip_buf[UIP_LLH_LEN + UIP_IPTCPH_LEN];
 
