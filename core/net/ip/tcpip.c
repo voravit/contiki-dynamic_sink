@@ -55,6 +55,7 @@
 #include <string.h>
 
 #define DEBUG DEBUG_NONE
+//#define DEBUG DEBUG_PRINT
 #include "net/ip/uip-debug.h"
 
 #if UIP_LOGGING
@@ -208,6 +209,16 @@ packet_input(void)
       uip_split_output();
 #else /* UIP_CONF_TCP_SPLIT */
 #if NETSTACK_CONF_WITH_IPV6
+#if SINK_ADDITION
+    /* print forwarded packets when operate as a sink, we use this to calculate propagation time */
+    if (get_operate_mode() > OPERATE_AS_SENSOR) {
+      uip_ipaddr_t target_ipaddr;
+      uip_ip6addr(&target_ipaddr, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 0x0001);
+      if uip_ip6addr_cmp(&UIP_IP_BUF->destipaddr, &target_ipaddr) {
+        printf("FWD: %d PKT: %.*s\n", UIP_IP_BUF->srcipaddr.u8[sizeof(UIP_IP_BUF->srcipaddr.u8) - 1], uip_len-56, (char *) &uip_buf[56]);
+      }
+    }
+#endif
       tcpip_ipv6_output();
 #else /* NETSTACK_CONF_WITH_IPV6 */
       PRINTF("tcpip packet_input output len %d\n", uip_len);
@@ -611,6 +622,15 @@ tcpip_ipv6_output(void)
           PRINTF("tcpip_ipv6_output: Destination off-link but no route\n");
 #endif /* !UIP_FALLBACK_INTERFACE */
           uip_clear_buf();
+/*
+#if SINK_ADDITION
+          if ((get_operate_mode() == OPERATE_AS_SENSOR) && (get_register_acked()) && 
+              (default_instance->current_dag->rank == INFINITE_RANK)) {
+printf("trigger activation!\n");
+            dis_trigger_activation_output();
+          }
+#endif
+*/
           return;
         }
 
