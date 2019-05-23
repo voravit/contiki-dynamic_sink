@@ -66,6 +66,9 @@
 void RPL_CALLBACK_PARENT_SWITCH(rpl_parent_t *old, rpl_parent_t *new);
 #endif /* RPL_CALLBACK_PARENT_SWITCH */
 
+#if SINK_ADDITION
+#include "net/ip/uiplib.h"
+#endif
 /*---------------------------------------------------------------------------*/
 extern rpl_of_t rpl_of0, rpl_mrhof;
 static rpl_of_t * const objective_functions[] = RPL_SUPPORTED_OFS;
@@ -112,6 +115,11 @@ rpl_print_neighbor_list(void)
           p == default_instance->current_dag->preferred_parent ? 'p' : ' ',
           (unsigned)((clock_now - stats->last_tx_time) / (60 * CLOCK_SECOND))
       );
+/*
+      printf("cnt: %lu sum: %lu ok: %lu col: %lu noack: %lu defer: %lu err: %lu rx: %lu\n",
+	stats->tx_tot_cnt, stats->tx_num_sum, stats->tx_ok_cnt, stats->tx_collision, 
+	stats->tx_noack, stats->tx_deferred, stats->tx_error, stats->rx_bytes);
+*/
       p = nbr_table_next(rpl_parents, p);
     }
     printf("RPL: end of list\n");
@@ -357,6 +365,9 @@ rpl_set_root(uint8_t instance_id, uip_ipaddr_t *dag_id)
   rpl_instance_t *instance;
   uint8_t version;
   int i;
+#if SINK_ADDITION
+  uint8_t dtsn=0;
+#endif
 
   version = RPL_LOLLIPOP_INIT;
   instance = rpl_get_instance(instance_id);
@@ -366,7 +377,18 @@ rpl_set_root(uint8_t instance_id, uip_ipaddr_t *dag_id)
       if(dag->used) {
         if(uip_ipaddr_cmp(&dag->dag_id, dag_id)) {
           version = dag->version;
+#if SINK_ADDITION
+          if (get_operate_mode() == OPERATE_AS_SENSOR) {
+            PRINTF("Use DIO version of active sink when promote candidate sink\n"); 
+            /* Set to RPL_LOLLIPOP_INIT since DIO version is never incremented */
+            version = RPL_LOLLIPOP_INIT;
+            dtsn = instance->dtsn_out;
+          } else {
+            RPL_LOLLIPOP_INCREMENT(version);
+          }
+#else
           RPL_LOLLIPOP_INCREMENT(version);
+#endif
         }
         if(dag == dag->instance->current_dag) {
           PRINTF("RPL: Dropping a joined DAG when setting this node as root");
@@ -427,6 +449,13 @@ rpl_set_root(uint8_t instance_id, uip_ipaddr_t *dag_id)
 
   instance->current_dag = dag;
   instance->dtsn_out = RPL_LOLLIPOP_INIT;
+#if SINK_ADDITION
+  /* use existing dtsn when promote sink */
+  if (get_operate_mode() == OPERATE_AS_SENSOR) {
+    RPL_LOLLIPOP_INCREMENT(dtsn);
+    instance->dtsn_out = dtsn;
+  } 
+#endif
   instance->of->update_metric_container(instance);
   default_instance = instance;
 
@@ -1627,5 +1656,41 @@ rpl_process_dio(uip_ipaddr_t *from, rpl_dio_t *dio)
   }
   p->dtsn = dio->dtsn;
 }
+/*---------------------------------------------------------------------------*/
+#if SINK_ADDITION || SENSOR_PRINT
+void
+rpl_calculate_traffic_metric(void)
+{
+  if (default_instance != NULL) {
+    calculate_traffic_metric();
+    default_instance->received_traffic = get_received_traffic();
+    default_instance->highest_traffic = get_highest_traffic();
+    printf("received_traffic: %lu highest_traffic: %lu\n", default_instance->received_traffic, default_instance->highest_traffic);
+  } 
+}
+#endif
+/*---------------------------------------------------------------------------*/
+#if SINK_ADDITION
+uip_ipaddr_t *
+rpl_get_src_addr(void)
+{
+  static uip_ds6_addr_t *locaddr;
+
+  for(locaddr = uip_ds6_if.addr_list;
+      locaddr < uip_ds6_if.addr_list + UIP_DS6_ADDR_NB; locaddr++) {
+    if(locaddr->isused && !(uip_is_addr_linklocal(&locaddr->ipaddr))) {
+#ifdef ROOT_VIRTUAL
+      if (!uip_ipaddr_cmp(&locaddr->ipaddr,get_vr_addr())) {
+        return &locaddr->ipaddr;
+      }
+#else
+        return &locaddr->ipaddr;
+#endif
+    }
+  }
+  return NULL;
+
+}
+#endif /* SINK_ADDITION */
 /*---------------------------------------------------------------------------*/
 /** @} */

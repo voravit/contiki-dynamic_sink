@@ -48,6 +48,10 @@
 #include "net/rpl/rpl-ns.h"
 #include "net/ipv6/multicast/uip-mcast6.h"
 
+#if SINK_ADDITION || SENSOR_PRINT
+#include "net/rpl/rpl-metric-timer.h"
+#endif
+
 /*---------------------------------------------------------------------------*/
 /** \brief Is IPv6 address addr the link-local, all-RPL-nodes
     multicast address? */
@@ -324,6 +328,13 @@ struct rpl_stats {
   uint16_t loop_errors;
   uint16_t loop_warnings;
   uint16_t root_repairs;
+  uint16_t dio_uc;
+  uint16_t dio_mc;
+  uint16_t dao_add;
+  uint16_t dao_remove;
+  uint16_t dis_out;
+  uint16_t dis_ext_in;
+  uint16_t dis_ext_out;
 };
 typedef struct rpl_stats rpl_stats_t;
 
@@ -353,6 +364,19 @@ void dao_ack_output(rpl_instance_t *, uip_ipaddr_t *, uint8_t, uint8_t);
 void rpl_icmp6_register_handlers(void);
 uip_ds6_nbr_t *rpl_icmp6_update_nbr_table(uip_ipaddr_t *from,
                                           nbr_table_reason_t r, void *data);
+#if (SINK_ADDITION >= 2)
+void dis_register_output(uip_ipaddr_t *dest, rpl_rank_t my_rank, uint16_t num_neighbor);
+//void dis_trigger_activation_output(void);
+#endif
+#if WITH_COMPOWER
+void dis_report_power_output(uint32_t cpu, uint32_t radio);
+#endif 
+#if (SINK_ADDITION == 2)
+void init_candidate_sink_list(void);
+uip_ipaddr_t *activate_high_rank_sink(void);
+uip_ipaddr_t *activate_sink(void);
+uip_ipaddr_t *deactivate_sink(void);
+#endif 
 
 /* RPL logic functions. */
 void rpl_join_dag(uip_ipaddr_t *from, rpl_dio_t *dio);
@@ -398,6 +422,13 @@ void rpl_schedule_probing(rpl_instance_t *instance);
 
 void rpl_reset_dio_timer(rpl_instance_t *);
 void rpl_reset_periodic_timer(void);
+
+#if (SINK_ADDITION >= 2)
+uint8_t get_register_acked(void);
+void set_register_acked(void);
+uint8_t sent_reset_topology_dependent_metric(void);
+void schedule_reset_topology_dependent_metric(void);
+#endif
 
 /* Route poisoning. */
 void rpl_poison_routes(rpl_dag_t *, rpl_parent_t *);
