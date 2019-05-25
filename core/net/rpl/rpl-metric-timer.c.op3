@@ -220,7 +220,7 @@ printf("ACTIVATE: %02x%02x\n", target_node->u8[14], target_node->u8[15]);
 if ((count == (3+10)) && ((my_addr->u8[15]) == 3)) {
       if (get_operate_mode() == OPERATE_AS_SENSOR) {
         if (default_instance != NULL) {
-//          if ((default_instance->current_dag->rank >= 1280) || (default_instance->received_traffic >= SINK_METRIC_RX_TRAFFIC)) {
+printf("AUTO ACTIVATION ETX: %u\n", default_instance->current_dag->rank);
 	    /* activate sink functionalities */
             dao_output(default_instance->current_dag->preferred_parent, RPL_ZERO_LIFETIME);
             defrt = uip_ds6_defrt_lookup(uip_ds6_defrt_choose());
@@ -243,15 +243,14 @@ if ((count == (3+10)) && ((my_addr->u8[15]) == 3)) {
             set_operate_mode(SINK_ADDITION);
             printf("operate mode: %d\n", get_operate_mode());
             NETSTACK_MAC.off(1);
-//	  }
 	} /* default_instance != NULL */
-//      } else {
       }
 }
 if ((count == (3+10+10+1)) && ((my_addr->u8[15]) == 3)) {
         /* OPERATE_AS_SINK */
+      if (get_operate_mode() >= OPERATE_AS_SENSOR) {
         if (default_instance != NULL) {
-          if (default_instance->received_traffic < (SINK_METRIC_RX_TRAFFIC*SINK_METRIC_THRESHOLD)) {
+printf("AUTO DEACTIVATION ETX: %u\n", default_instance->current_dag->rank);
 	    /* deactivate sink functionalities */
             default_instance->current_dag->min_rank = last_sensor_rank + RPL_MIN_HOPRANKINC;
             default_instance->current_dag->rank = last_sensor_rank + RPL_MIN_HOPRANKINC;
@@ -271,10 +270,8 @@ if ((count == (3+10+10+1)) && ((my_addr->u8[15]) == 3)) {
             set_operate_mode(OPERATE_AS_SENSOR);
             printf("operate mode: %d\n", get_operate_mode());
             NETSTACK_MAC.on();
-
-          }
         }
-//      }
+      }
 }
 #endif /* !SINK_FIXED */
 #endif /* SINK_ADDITION == 1 */
