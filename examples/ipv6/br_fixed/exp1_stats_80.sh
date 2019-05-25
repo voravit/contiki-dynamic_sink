@@ -27,7 +27,7 @@ CTR=0
 	sed -i "s/<randomseed>123456/<randomseed>${SEED}/" run.csc
 	#sed -i "s/MAX_RX_TRAFFIC 3000/MAX_RX_TRAFFIC ${RX_TRAFFIC}/" coordinator.c
         #/usr/bin/gcc -o coordinator coordinator.c
-	#sed -i "s/<success_ratio_rx>1\.0/<success_ratio_rx>0\.8/" run.csc
+	sed -i "s/<success_ratio_rx>1\.0/<success_ratio_rx>0\.8/" run.csc
 	#sed -i "s/<bound>false/<bound>true/" run.csc
 	#sed -i "2117s/<bound>false/<bound>true/" run.csc
 	#sed -i "2130s/<bound>false/<bound>true/" run.csc
@@ -80,14 +80,14 @@ CTR=0
 
 	echo "STOP:" `date "+%Y-%m-%d %H:%M:%S %N"` >> $LOGFILE
 	sleep 2
-	mkdir stats_${RATE}
-	mv COOJA* log*txt stats_${RATE}
-	mv *pcap stats_${RATE}
-	mv tun*txt stats_${RATE}
-	mv nohup.out stats_${RATE}
-	mv route.out stats_${RATE}
-	mv stats_${RATE} ${BASE_TEST}/.
+	mkdir stats_80_${RATE}
+	mv COOJA* log*txt stats_80_${RATE}
+	mv *pcap stats_80_${RATE}
+	mv tun*txt stats_80_${RATE}
+	mv nohup.out stats_80_${RATE}
+	mv route.out stats_80_${RATE}
+	mv stats_80_${RATE} ${BASE_TEST}/.
 	cd $BASE_TEST
-	mv $LOGFILE stats_${RATE}/.
-	mv udp.out stats_${RATE}/.
-	mv coordinator.out stats_${RATE}/.
+	mv $LOGFILE stats_80_${RATE}/.
+	mv udp.out stats_80_${RATE}/.
+	mv coordinator.out stats_80_${RATE}/.
