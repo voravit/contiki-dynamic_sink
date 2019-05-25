@@ -338,4 +338,50 @@
 #define RPL_DIS_START_DELAY             5
 #endif
 
+/*
+ * RPL extension
+ */
+#ifdef  RPL_CONF_COORDINATOR_IP_ADDR
+#define RPL_COORDINATOR_IP_ADDR         RPL_CONF_COORDINATOR_IP_ADDR
+#else
+#define RPL_COORDINATOR_IP_ADDR         "FD00::2"
+#endif
+
+#ifdef  RPL_CONF_VIRTUAL_ROOT_IP_ADDR
+#define RPL_VIRTUAL_ROOT_IP_ADDR         RPL_CONF_VIRTUAL_ROOT_IP_ADDR
+#else
+#define RPL_VIRTUAL_ROOT_IP_ADDR         "FD00::10"
+#endif
+
+#ifdef  SINK_CONF_METRIC_TREE_SIZE
+#define SINK_METRIC_TREE_SIZE            SINK_CONF_METRIC_TREE_SIZE
+#else
+#define SINK_METRIC_TREE_SIZE            16
+#endif
+
+#ifdef  SINK_CONF_METRIC_LONGEST_HOP
+#define SINK_METRIC_LONGEST_HOP          SINK_CONF_METRIC_LONGEST_HOP
+#else
+#define SINK_METRIC_LONGEST_HOP          6
+#endif
+
+#ifdef  SINK_CONF_METRIC_RX_TRAFFIC
+#define SINK_METRIC_RX_TRAFFIC           SINK_CONF_METRIC_RX_TRAFFIC
+#else
+#define SINK_METRIC_RX_TRAFFIC           2000
+#endif
+
+#ifdef  SINK_CONF_METRIC_NBR_TRAFFIC
+#define SINK_METRIC_NBR_TRAFFIC          SINK_CONF_METRIC_NBR_TRAFFIC
+#else
+#define SINK_METRIC_NBR_TRAFFIC          1000
+#endif
+
+/* This threshold is the ratio for deactivation */
+#ifdef  SINK_CONF_METRIC_THRESHOLD
+#define SINK_METRIC_THRESHOLD          SINK_CONF_METRIC_THRESHOLD
+#else
+#define SINK_METRIC_THRESHOLD          0.5
+#endif
+
 #endif /* RPL_CONF_H */
