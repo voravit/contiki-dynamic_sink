@@ -268,6 +268,7 @@ struct rpl_instance {
 #if SINK_ADDITION || SENSOR_PRINT
   uint32_t received_traffic;
   uint32_t highest_traffic;
+  uint32_t energy;
 #endif
 };
 /*---------------------------------------------------------------------------*/

@@ -430,6 +430,14 @@ uint8_t sent_reset_topology_dependent_metric(void);
 void schedule_reset_topology_dependent_metric(void);
 #endif
 
+#if SINK_ADDITION || SENSOR_PRINT
+int rpl_parent_queue_len(void);
+uint8_t status_rpl_parent_queue(void);
+void start_rpl_parent_queue(void);
+void stop_rpl_parent_queue(void);
+void update_energy_metric(uint32_t value);
+#endif
+
 /* Route poisoning. */
 void rpl_poison_routes(rpl_dag_t *, rpl_parent_t *);
 

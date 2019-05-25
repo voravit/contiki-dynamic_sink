@@ -549,7 +549,10 @@ PROCESS_THREAD(border_router_process, ev, data)
   print_local_addresses();
 #endif
 
-  start_rpl_metric_timer();
+#if (SINK_ADDITION >= 1)
+//  start_rpl_metric_timer();
+  start_rpl_parent_queue();
+#endif
 
   etimer_set(&et, 60*CLOCK_SECOND);
   while(interval_ctr<(2 + CONF_TOTAL_SEND + 1)) {
@@ -577,7 +580,7 @@ if (default_instance != NULL) {
 #endif
 #if SINK_ADDITION || SENSOR_PRINT
 if (default_instance != NULL) {
-  printf("RANK: %u TRAFFIC: %lu %lu \n", default_instance->current_dag->rank, default_instance->received_traffic, default_instance->highest_traffic);
+  printf("RANK: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d\n", default_instance->current_dag->rank, default_instance->received_traffic, default_instance->highest_traffic, default_instance->energy, rpl_parent_queue_len());
 }
 #endif
 printf("MARK %d END\n",(interval_ctr-2));
@@ -599,7 +602,10 @@ PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
   powertrace_stop();
 #endif
 
+#if (SINK_ADDITION >= 1)
+stop_rpl_parent_queue();
 stop_rpl_metric_timer();
+#endif
 
 #if SINK_ADDITION
 printf("SLIP: %lu %lu \n", slip_get_input_bytes(), slip_get_output_bytes());

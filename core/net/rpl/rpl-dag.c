@@ -1670,6 +1670,15 @@ rpl_calculate_traffic_metric(void)
 }
 #endif
 /*---------------------------------------------------------------------------*/
+/* value in percentage times 100 for 2 decimal */
+void
+update_energy_metric(uint32_t value)
+{
+  if (default_instance != NULL) {
+    default_instance->energy = value;
+  } 
+}
+/*---------------------------------------------------------------------------*/
 #if SINK_ADDITION
 uip_ipaddr_t *
 rpl_get_src_addr(void)

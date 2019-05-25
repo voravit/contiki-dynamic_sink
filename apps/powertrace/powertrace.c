@@ -59,7 +59,7 @@ struct powertrace_sniff_stats {
   unsigned long last_output_txtime, last_output_rxtime;
 };
 /*---------------------------------------------------------------------------*/
-#if SINK_ADDITION /* for wismote */
+#if SINK_ADDITION || SENSOR_PRINT /* for wismote */
 #include "net/rpl/rpl-private.h"
 #define CPU 2.2
 #define LPM 0.0018
@@ -104,10 +104,9 @@ powertrace_print(char *str)
 
   unsigned long time, all_time, radio, all_radio;
   
-#if (SINK_ADDITION == 3)
+#if SINK_ADDITION || SENSOR_PRINT
+#define ENERGY_BUDGET 10800000
   unsigned long long pwr_cpu, pwr_radio;
-//#else
-//  unsigned long pwr_cpu, pwr_radio;
 #endif
 
   struct powertrace_sniff_stats *s;
@@ -141,7 +140,8 @@ powertrace_print(char *str)
   all_radio = energest_type_time(ENERGEST_TYPE_LISTEN) +
     energest_type_time(ENERGEST_TYPE_TRANSMIT);
 
-#if (SINK_ADDITION == 3)
+//#if (SINK_ADDITION == 3)
+#if SINK_ADDITION || SENSOR_PRINT
 pwr_cpu =  ((unsigned long long)((all_cpu*CPU)+(all_lpm*LPM))*VOLTAGE*100)/TICK_SECOND;
 pwr_radio =  ((unsigned long long)((all_listen*RX)+(all_transmit*TX))*VOLTAGE*100)/TICK_SECOND;
     printf("%s %lu P %x%02x %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %llu %llu\n", 
@@ -149,11 +149,15 @@ pwr_radio =  ((unsigned long long)((all_listen*RX)+(all_transmit*TX))*VOLTAGE*10
          all_cpu, all_lpm, all_transmit, all_listen, all_idle_transmit, all_idle_listen,
          cpu, lpm, transmit, listen, idle_transmit, idle_listen,
          time, all_time, radio, all_radio, pwr_cpu, pwr_radio);
-// pwr_cpu and pwr_radio unit is mJ*100 so we can get 2 decimal
-  if (get_operate_mode() > OPERATE_AS_SENSOR) {
-    dis_report_power_output((uint32_t)pwr_cpu, (uint32_t)pwr_radio);
-  }
-
+//update_energy_metric((uint32_t) (((ENERGY_BUDGET*100)-(pwr_cpu+pwr_radio))*100)/(ENERGY_BUDGET*100) );
+/*
+printf("ENR:LLU: %llu ", (((ENERGY_BUDGET-((pwr_cpu+pwr_radio)/100))*100)/ENERGY_BUDGET));
+printf("LU: %lu\n", (uint32_t) (((ENERGY_BUDGET-((pwr_cpu+pwr_radio)/100))*100)/ENERGY_BUDGET));
+update_energy_metric((uint32_t) (((ENERGY_BUDGET-((pwr_cpu+pwr_radio)/100))*100)/ENERGY_BUDGET) );
+*/
+printf("ENR:LLU: %llu ", ((((ENERGY_BUDGET*100)-(pwr_cpu+pwr_radio))*100)/ENERGY_BUDGET));
+printf("LU: %lu\n", (uint32_t) ((((ENERGY_BUDGET*100)-(pwr_cpu+pwr_radio))*100)/ENERGY_BUDGET)); 
+update_energy_metric((uint32_t) ((((ENERGY_BUDGET*100)-(pwr_cpu+pwr_radio))*100)/ENERGY_BUDGET));
 #else
 //pwr_cpu =  (unsigned long)((all_cpu*CPU)+(all_lpm*LPM))*VOLTAGE/TICK_SECOND;
 //pwr_radio =  (unsigned long)((all_listen*RX)+(all_transmit*TX))*VOLTAGE/TICK_SECOND;

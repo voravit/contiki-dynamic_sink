@@ -146,6 +146,15 @@ neighbor_queue_from_addr(const linkaddr_t *addr)
   return NULL;
 }
 /*---------------------------------------------------------------------------*/
+int neighbor_queue_length(const linkaddr_t *addr)
+{
+  struct neighbor_queue *n = neighbor_queue_from_addr(addr);
+  if (n != NULL) {
+    return list_length(n->queued_packet_list);
+  }
+  return 0;
+}
+/*---------------------------------------------------------------------------*/
 static clock_time_t
 backoff_period(void)
 {

@@ -321,9 +321,9 @@ printf("uint32_t:%d\n", sizeof(uint32_t));
 printf("int:%d\n", sizeof(int));
 */
 
-#if RESCUE
-  start_rpl_metric_timer();
-#endif 
+#if SENSOR_PRINT
+start_rpl_parent_queue();
+#endif
 
 /* wait 2 min for RPL topology to form */
 etimer_set(&periodic, (120*CLOCK_SECOND));
@@ -367,7 +367,7 @@ if (default_instance != NULL) {
 #endif
 #if SINK_ADDITION || SENSOR_PRINT
 if (default_instance != NULL) {
-  printf("RANK: %u TRAFFIC: %lu %lu \n", default_instance->current_dag->rank, default_instance->received_traffic, default_instance->highest_traffic);
+  printf("RANK: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d\n", default_instance->current_dag->rank, default_instance->received_traffic, default_instance->highest_traffic, default_instance->energy, rpl_parent_queue_len());
 }
 #endif
 printf("MARK %d END\n",ctr);
@@ -376,6 +376,7 @@ printf("MARK %d END\n",ctr);
 	ctimer_set(&backoff_timer, SEND_TIME_VARY, send_packet, NULL);
         if (ctr==11) {
           etimer_set(&periodic, SEND_INTERVAL_VARY);
+printf("RATE INCREASE %lu\n",SEND_INTERVAL_VARY);
         } else {
           etimer_reset(&periodic);
 if ((ctr == (10+(2*RATE)+1)) || (ctr == (10+(7*RATE)+1))) {
@@ -390,7 +391,7 @@ if (default_instance != NULL) {
 #endif
 #if SINK_ADDITION || SENSOR_PRINT
 if (default_instance != NULL) {
-  printf("RANK: %u TRAFFIC: %lu %lu \n", default_instance->current_dag->rank, default_instance->received_traffic, default_instance->highest_traffic);
+  printf("RANK: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d\n", default_instance->current_dag->rank, default_instance->received_traffic, default_instance->highest_traffic, default_instance->energy, rpl_parent_queue_len());
 }
 #endif
 printf("MARK %d END\n",ctr);
@@ -400,6 +401,7 @@ printf("MARK %d END\n",ctr);
 	ctimer_set(&backoff_timer, SEND_TIME_60S, send_packet, NULL);
         if (ctr==(10+(10*RATE)+1)) {
           etimer_set(&periodic, SEND_INTERVAL_60S);
+printf("RATE DECREASE %lu\n",SEND_INTERVAL_60S);
         } else {
           etimer_reset(&periodic);
 if ((ctr == (10+(10*RATE)+3))||(ctr == (10+(10*RATE)+8))) {
@@ -414,7 +416,7 @@ if (default_instance != NULL) {
 #endif
 #if SINK_ADDITION || SENSOR_PRINT
 if (default_instance != NULL) {
-  printf("RANK: %u TRAFFIC: %lu %lu \n", default_instance->current_dag->rank, default_instance->received_traffic, default_instance->highest_traffic);
+  printf("RANK: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d\n", default_instance->current_dag->rank, default_instance->received_traffic, default_instance->highest_traffic, default_instance->energy, rpl_parent_queue_len());
 }
 #endif
 printf("MARK %d END\n",ctr);
@@ -442,7 +444,8 @@ PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic));
   powertrace_stop();
 #endif
 
-#if RESCUE
+#if SENSOR_PRINT
+stop_rpl_parent_queue();
 stop_rpl_metric_timer();
 #endif
 
