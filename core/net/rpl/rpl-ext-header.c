@@ -358,7 +358,11 @@ insert_srh_header(void)
     return 1;
   }
 
+#ifdef ROOT_VIRTUAL
+  root_node = rpl_ns_get_node(dag, rpl_get_src_addr());
+#else
   root_node = rpl_ns_get_node(dag, &dag->dag_id);
+#endif
   if(root_node == NULL) {
     PRINTF("RPL: SRH root node not found\n");
     return 0;
