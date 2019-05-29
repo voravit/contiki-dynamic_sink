@@ -275,6 +275,9 @@ printf("AUTO DEACTIVATION ETX: %u\n", default_instance->current_dag->rank);
 }
 #endif /* !SINK_FIXED */
 #endif /* SINK_ADDITION == 1 */
+#if SENSOR_PRINT
+      rpl_calculate_traffic_metric();
+#endif
       etimer_reset(&periodic);
     }
   }
