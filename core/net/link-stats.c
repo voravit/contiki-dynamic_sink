@@ -86,6 +86,7 @@ static uint32_t tx_all;
 #if SINK_ADDITION || SENSOR_PRINT
 static uint32_t rx_sum;
 static uint32_t rx_highest;
+static uint32_t rx_highest_ctr;
 #endif
 /*---------------------------------------------------------------------------*/
 /* Returns the neighbor's link stats */
@@ -294,6 +295,7 @@ calculate_traffic_metric(void)
   linkaddr_t local_lladdr = {{0}};
   uint32_t highest_rx = 0;
   uint32_t sum_rx = 0;
+  uint32_t highest_rx_ctr = 0;
 
   for(stats = nbr_table_head(link_stats); stats != NULL; stats = nbr_table_next(link_stats, stats)) {
     lladdr = nbr_table_get_lladdr(link_stats, stats);
@@ -311,11 +313,17 @@ calculate_traffic_metric(void)
       }	
       sum_rx += (stats->rx_bytes-stats->rx_bytes_last);
       stats->rx_bytes_last = stats->rx_bytes;
+
+      if (highest_rx_ctr < (stats->rx-stats->rx_last)) {
+        highest_rx_ctr = stats->rx-stats->rx_last;
+      }	
+      stats->rx_last = stats->rx;
       	
     }
   }
   rx_sum = sum_rx;
   rx_highest = highest_rx;
+  rx_highest_ctr = highest_rx_ctr;
 /*
   if (default_instance != NULL) {
     default_instance->received_traffic = sum_rx;
@@ -335,6 +343,12 @@ uint32_t
 get_highest_traffic(void)
 {
   return rx_highest;
+}
+/*---------------------------------------------------------------------------*/
+uint32_t
+get_rx_highest(void)
+{
+  return rx_highest_ctr;
 }
 /*---------------------------------------------------------------------------*/
 uint32_t

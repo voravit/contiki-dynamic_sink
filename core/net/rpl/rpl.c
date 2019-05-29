@@ -61,6 +61,9 @@
 rpl_stats_t rpl_stats;
 #endif
 
+#ifdef ROOT_VIRTUAL
+#include "contiki-net.h"
+#endif
 /* functions for coordinated sinks */
 #if (SINK_ADDITION == 3)
 static uip_ipaddr_t coordinator_addr;
@@ -433,11 +436,13 @@ rpl_init(void)
 #if (SINK_ADDITION == 2)
   init_candidate_sink_list();
 #endif
-#if (SINK_ADDITION == 1) || SENSOR_PRINT
+/*
+#if (SINK_ADDITION == 1) || SENSOR_PRINT || FIXED_SINK
   if (status_rpl_metric_timer()==0) {
     start_rpl_metric_timer();
   }
 #endif
+*/
 
 #if RPL_WITH_NON_STORING
   rpl_ns_init();

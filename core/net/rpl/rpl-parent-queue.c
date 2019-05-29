@@ -48,6 +48,7 @@
 #include "net/ip/uip-debug.h"
 
 #if SINK_ADDITION || SENSOR_PRINT
+#include "net/link-stats.h"
 /*---------------------------------------------------------------------------*/
 #define UIP_IP_BUF       ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
 #define UIP_ICMP_BUF     ((struct uip_icmp_hdr *)&uip_buf[uip_l2_l3_hdr_len])
@@ -115,12 +116,12 @@ PROCESS_THREAD(rpl_parent_queue_process, ev, data)
         }
 #if UIP_CONF_STATISTICS
 if (default_instance->current_dag->preferred_parent != NULL) {
-  printf("QN: %d QNOW: %d QEMA: %d RANK: %u PRN: %02x RX: %u TX: %u FW: %u\n", ctr, q_now, qema, default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], uip_stat.ip.recv, uip_stat.ip.sent, uip_stat.ip.forwarded);
+  printf("QN: %d QNOW: %d QEMA: %d RANK: %u PRN: %02x RX: %u TX: %u FW: %u ETX: %u\n", ctr, q_now, qema, default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], uip_stat.ip.recv, uip_stat.ip.sent, uip_stat.ip.forwarded, rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
 } else {
-  printf("QN: %d QNOW: %d QEMA: %d RANK: %u PRN: 00 RX: %u TX: %u FW: %u\n", ctr, q_now, qema, default_instance->current_dag->rank, uip_stat.ip.recv, uip_stat.ip.sent, uip_stat.ip.forwarded);
+  printf("QN: %d QNOW: %d QEMA: %d RANK: %u PRN: 00 RX: %u TX: %u FW: %u ETX: %u\n", ctr, q_now, qema, default_instance->current_dag->rank, uip_stat.ip.recv, uip_stat.ip.sent, uip_stat.ip.forwarded, rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
 }
 #else
-printf("QN: %d QNOW: %d QEMA: %d RANK: %u PRN: %02x\n", ctr, q_now, qema, default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15]);
+printf("QN: %d QNOW: %d QEMA: %d RANK: %u PRN: %02x ETX: %u\n", ctr, q_now, qema, default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
 #endif
 
         //printf("parent qema: %d\n", qema);

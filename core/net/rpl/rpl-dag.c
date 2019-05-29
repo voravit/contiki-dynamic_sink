@@ -1668,7 +1668,6 @@ rpl_calculate_traffic_metric(void)
     printf("received_traffic: %lu highest_traffic: %lu\n", default_instance->received_traffic, default_instance->highest_traffic);
   } 
 }
-#endif
 /*---------------------------------------------------------------------------*/
 /* value in percentage times 100 for 2 decimal */
 void
@@ -1678,6 +1677,7 @@ update_energy_metric(uint32_t value)
     default_instance->energy = value;
   } 
 }
+#endif
 /*---------------------------------------------------------------------------*/
 #if SINK_ADDITION
 uip_ipaddr_t *

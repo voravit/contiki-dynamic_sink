@@ -72,8 +72,8 @@
 #endif
 /*---------------------------------------------------------------------------*/
 #if (SINK_ADDITION >= 2)
-//#include "contiki-net.h"
-  static rpl_rank_t last_sensor_rank = 0;
+static rpl_rank_t last_sensor_rank = 0;
+static uint8_t register_acked = 0;
 #endif
 /*---------------------------------------------------------------------------*/
 #if (SINK_ADDITION == 2)
@@ -97,6 +97,7 @@ void init_candidate_sink_list(void){
     list_init(candidate_sink_list);
     list_initialized = 1;
   }
+printf("candidate_sink_list init\n");
 }
 /*---------------------------------------------------------------------------*/
 static candidate_sink_t *find_sink_in_list(uip_ipaddr_t *addr) {
@@ -134,6 +135,8 @@ uip_ipaddr_t *activate_high_rank_sink(void) {
 /*---------------------------------------------------------------------------*/
 uip_ipaddr_t *activate_sink(void) {
   candidate_sink_t *key;
+printf("IN activate_sink\n");
+show_candidate_sink_list();
   for(key = list_head(candidate_sink_list); key != NULL; key = list_item_next(key)) {
     if (key->activated==0) {
       //key->activated=1; // workaround: mark directly since we cannot get reply on backbone
@@ -145,6 +148,8 @@ uip_ipaddr_t *activate_sink(void) {
 /*---------------------------------------------------------------------------*/
 uip_ipaddr_t *deactivate_sink(void) {
   candidate_sink_t *key;
+printf("IN deactivate_sink\n");
+show_candidate_sink_list();
   for(key = list_head(candidate_sink_list); key != NULL; key = list_item_next(key)) {
     if (key->activated==1) {
       //key->activated=0; // workaround: mark directly since we cannot get reply on backbone
@@ -354,8 +359,8 @@ dis_input(void)
             /* register ack: from coordinator arrive to candidate sink */
             if (UIP_ICMP_PAYLOAD[0]&0x40) {
 	    printf("DIS0:%02x ACK REGISTER \n", UIP_ICMP_PAYLOAD[0]);
-              if (!get_register_acked()) {
-                set_register_acked();
+              if (!register_acked) {
+                register_acked = 1;
               }
               break;
             }
@@ -374,45 +379,6 @@ dis_input(void)
 #endif /* RPL_CONF_STATS */
             //uip_icmp6_send(get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+sizeof(uip_ipaddr_t));
             uip_icmp6_send_src(rpl_get_src_addr(), get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+4+sizeof(uip_ipaddr_t));
-#elif (SINK_ADDITION == 2)
-            uip_ipaddr_copy(&from, &UIP_IP_BUF->srcipaddr);
-            uip_ipaddr_copy(&my_addr, &UIP_IP_BUF->destipaddr);
-            memcpy(&payload,&UIP_ICMP_PAYLOAD[0],2); // copy DIS flags and reserve fields
-            payload[0] |= 0x40; // set acknowledgement bit
-
-            candidate_sink_t *key = NULL;
-            uint16_t tmp;
-            key = find_sink_in_list(&from);
-            if (key == NULL) {
-              //printf("candidate sink not in the list\n");
-              key = memb_alloc(&candidate_sink_mem);
-              if (key != NULL) {
-                uip_ipaddr_copy(&key->node_addr, &from);
-                memcpy(&tmp,&UIP_ICMP_PAYLOAD[2],sizeof(rpl_rank_t));
-                key->rank = uip_ntohs(tmp);
-                memcpy(&tmp,&UIP_ICMP_PAYLOAD[4],sizeof(int));
-                key->num_neighbor = uip_ntohs(tmp);
-                list_add(candidate_sink_list, key);
-                printf("ADD CANDIDATE SINK: %02x%02x\n", from.u8[14], from.u8[15]);
-                show_candidate_sink_list();
-              } else {
-                printf("cannot allocate mem for a candidate sink\n");
-              }
-            } else {
-              memcpy(&tmp,&UIP_ICMP_PAYLOAD[2],sizeof(rpl_rank_t));
-              key->rank = uip_ntohs(tmp);
-              memcpy(&tmp,&UIP_ICMP_PAYLOAD[4],sizeof(int));
-              key->num_neighbor = uip_ntohs(tmp);
-              printf("candidate sink is already in the list\n");
-            }
-
-            uip_clear_buf();
-            buffer = UIP_ICMP_PAYLOAD;
-            memcpy(buffer,&payload,2);
-#if RPL_CONF_STATS
-  RPL_STAT(rpl_stats.dis_ext_out++);
-#endif /* RPL_CONF_STATS */
-            uip_icmp6_send_src(&my_addr, &from, ICMP6_RPL, RPL_CODE_DIS, 2);
 #endif
 	    break;
 	  case 2: /* activation */
@@ -643,10 +609,10 @@ dis_report_power_output(uint32_t cpu, uint32_t radio)
 #endif /* WITH_COMPOWER */
 #endif /* SINK_ADDITION == 3 */
 
-#if (SINK_ADDITION >= 2)
 /*---------------------------------------------------------------------------*/
-void
-dis_register_output(uip_ipaddr_t *dest, rpl_rank_t my_rank, uint16_t num_neighbor)
+#if (SINK_ADDITION == 3)
+static void
+dis_register_output(uip_ipaddr_t *candidate_sink, rpl_rank_t my_rank, uint16_t num_neighbor)
 {
   unsigned char *buffer;
   uint16_t tmp;
@@ -659,24 +625,23 @@ dis_register_output(uip_ipaddr_t *dest, rpl_rank_t my_rank, uint16_t num_neighbo
   RPL_STAT(rpl_stats.dis_ext_out++);
 #endif /* RPL_CONF_STATS */
 
-  if (dest == NULL) {
+  if (candidate_sink == NULL) {
     tmp = uip_htons(my_rank);
     memcpy(&buffer[2], &tmp, sizeof(rpl_rank_t));
     tmp = uip_htons(num_neighbor);
     memcpy(&buffer[4], &tmp, sizeof(uint16_t));
-    uip_icmp6_send(get_vr_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+4);
-#if (SINK_ADDITION == 3)
+    uip_icmp6_send(get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+4);
   } else {
     tmp = uip_htons(my_rank);
     memcpy(&buffer[2], &tmp, sizeof(rpl_rank_t));
     tmp = uip_htons(num_neighbor);
     memcpy(&buffer[4], &tmp, sizeof(uint16_t));
-    memcpy(&buffer[6],rpl_get_src_addr(),sizeof(uip_ipaddr_t));
-    uip_icmp6_send_src(rpl_get_src_addr(), dest, ICMP6_RPL, RPL_CODE_DIS, 2+4+sizeof(uip_ipaddr_t));
-#endif /* SINK_ADDITION == 3 */
+    memcpy(&buffer[6], candidate_sink, sizeof(uip_ipaddr_t));
+    //uip_icmp6_send_src(rpl_get_src_addr(), dest, ICMP6_RPL, RPL_CODE_DIS, 2+4+sizeof(uip_ipaddr_t));
+    uip_icmp6_send(get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+4+sizeof(uip_ipaddr_t));
   }
 }
-#endif /* SINK_ADDITION >= 2 */
+#endif /* SINK_ADDITION == 3 */
 /*---------------------------------------------------------------------------*/
 #if 0
 void
@@ -1218,10 +1183,32 @@ dao_input_storing(void)
       case RPL_OPTION_TARGET_DESC:
         /* candidate sink sends rank and num_neighbor in DAO */
 #if (SINK_ADDITION == 2)
-        node = find_sink_in_list(&prefix);
-        if (node !=NULL) {
-          memcpy(&node->rank, buffer + i + 2, sizeof(rpl_rank_t));
-          memcpy(&node->num_neighbor, buffer + i + 4, sizeof(uint16_t));
+        node = find_sink_in_list(&dao_sender_addr);
+        uint16_t tmp;
+        if (node == NULL) {
+          node = memb_alloc(&candidate_sink_mem);
+          if (node != NULL) {
+            uip_ipaddr_copy(&node->node_addr, &dao_sender_addr);
+            //memcpy(&node->rank, buffer + i + 2, sizeof(rpl_rank_t));
+            //memcpy(&node->num_neighbor, buffer + i + 4, sizeof(uint16_t));
+            memcpy(&tmp, buffer + i + 2, sizeof(rpl_rank_t));
+            node->rank = uip_ntohs(tmp);
+            memcpy(&tmp, buffer + i + 4, sizeof(uint16_t));
+            node->num_neighbor = uip_ntohs(tmp);
+            list_add(candidate_sink_list, node);
+            printf("ADD CANDIDATE SINK: %02x%02x rank: %u nbr: %u\n", dao_sender_addr.u8[14], dao_sender_addr.u8[15], node->rank, node->num_neighbor);
+            show_candidate_sink_list();
+          } else {
+            printf("cannot allocate mem for a candidate sink\n");
+          }
+        } else {
+          //memcpy(&node->rank, buffer + i + 2, sizeof(rpl_rank_t));
+          //memcpy(&node->num_neighbor, buffer + i + 4, sizeof(uint16_t));
+          memcpy(&tmp, buffer + i + 2, sizeof(rpl_rank_t));
+          node->rank = uip_ntohs(tmp);
+          memcpy(&tmp, buffer + i + 4, sizeof(uint16_t));
+          node->num_neighbor = uip_ntohs(tmp);
+          printf("UPDATE CANDIDATE SINK: %02x%02x rank: %u nbr: %u\n", dao_sender_addr.u8[14], dao_sender_addr.u8[15], node->rank, node->num_neighbor);
         }
 #endif
 #if (SINK_ADDITION == 3)
@@ -1500,6 +1487,20 @@ dao_input_nonstoring(void)
   int len;
   int i;
 
+#if SINK_ADDITION
+  int ttl;
+  ttl = UIP_IP_BUF->ttl;
+#if (SINK_ADDITION == 3)
+  uint16_t tmp;
+  int cs_info = 0;
+  rpl_rank_t cs_rank = 0;
+  uint16_t cs_num_neighbor = 0;
+#endif
+#if (SINK_ADDITION == 2)
+  candidate_sink_t *node = NULL;
+#endif
+#endif
+
   prefixlen = 0;
 
   uip_ipaddr_copy(&dao_sender_addr, &UIP_IP_BUF->srcipaddr);
@@ -1554,6 +1555,46 @@ dao_input_nonstoring(void)
           memcpy(&dao_parent_addr, buffer + i + 6, 16);
         }
         break;
+      case RPL_OPTION_TARGET_DESC:
+        /* candidate sink sends rank and num_neighbor in DAO */
+#if (SINK_ADDITION == 2)
+        node = find_sink_in_list(&dao_sender_addr);
+  	uint16_t tmp;
+        if (node == NULL) {
+	  node = memb_alloc(&candidate_sink_mem);
+          if (node != NULL) {
+            uip_ipaddr_copy(&node->node_addr, &dao_sender_addr);
+            //memcpy(&node->rank, buffer + i + 2, sizeof(rpl_rank_t));
+            //memcpy(&node->num_neighbor, buffer + i + 4, sizeof(uint16_t));
+            memcpy(&tmp, buffer + i + 2, sizeof(rpl_rank_t));
+	    node->rank = uip_ntohs(tmp);
+            memcpy(&tmp, buffer + i + 4, sizeof(uint16_t));
+	    node->num_neighbor = uip_ntohs(tmp);
+            list_add(candidate_sink_list, node);
+            printf("ADD CANDIDATE SINK: %02x%02x rank: %u nbr: %u\n", dao_sender_addr.u8[14], dao_sender_addr.u8[15], node->rank, node->num_neighbor);
+            show_candidate_sink_list();
+          } else {
+            printf("cannot allocate mem for a candidate sink\n");
+          }
+	} else {
+          //memcpy(&node->rank, buffer + i + 2, sizeof(rpl_rank_t));
+          //memcpy(&node->num_neighbor, buffer + i + 4, sizeof(uint16_t));
+          memcpy(&tmp, buffer + i + 2, sizeof(rpl_rank_t));
+	  node->rank = uip_ntohs(tmp);
+          memcpy(&tmp, buffer + i + 4, sizeof(uint16_t));
+	  node->num_neighbor = uip_ntohs(tmp);
+          printf("UPDATE CANDIDATE SINK: %02x%02x rank: %u nbr: %u\n", dao_sender_addr.u8[14], dao_sender_addr.u8[15], node->rank, node->num_neighbor);
+        }
+#endif
+#if (SINK_ADDITION == 3)
+        cs_info = 1;
+        // prefix contains the candidate sink address
+        memcpy(&tmp, buffer + i + 2, sizeof(rpl_rank_t));
+        cs_rank = uip_ntohs(tmp);
+        memcpy(&tmp, buffer + i + 4, sizeof(uint16_t));
+        cs_num_neighbor = uip_ntohs(tmp);
+#endif
+        break;
     }
   }
 
@@ -1580,6 +1621,54 @@ dao_input_nonstoring(void)
     dao_ack_output(instance, &dao_sender_addr, sequence,
                    RPL_DAO_ACK_UNCONDITIONAL_ACCEPT);
   }
+
+#if (SINK_ADDITION == 3)
+  if (cs_info) {
+#if RPL_CONF_STATS
+    RPL_STAT(rpl_stats.dis_ext_out++);
+#endif /* RPL_CONF_STATS */
+    dis_register_output(&dao_sender_addr, cs_rank, cs_num_neighbor);
+  }
+#endif /* SINK_ADDITION == 3 */
+#if SINK_ADDITION
+  if (get_operate_mode() > OPERATE_AS_SENSOR) {
+    if (default_instance != NULL) {
+      if (lifetime != RPL_ZERO_LIFETIME) {
+        default_instance->tree_size = uip_ds6_nbr_num();
+        if (UIP_TTL-ttl+1 > default_instance->longest_hop) {
+          default_instance->longest_hop = UIP_TTL-ttl+1;
+        }
+      }
+    }
+
+    if ((default_instance->tree_size >= SINK_METRIC_TREE_SIZE)||
+        (default_instance->longest_hop >= SINK_METRIC_LONGEST_HOP)) {
+#if (SINK_ADDITION == 2)
+// TBD: activate another sink
+#endif
+#if (SINK_ADDITION == 3)
+        payload[0] = 0x90;
+        payload[1] = 0x00;
+        payload[2] = 0x01;
+        memcpy(&payload[3],&default_instance->tree_size,1);
+        memcpy(&payload[4],&default_instance->longest_hop,1);
+  
+        uip_clear_buf();
+        buffer = UIP_ICMP_PAYLOAD;
+        memcpy(buffer,&payload,5);
+  
+#if RPL_CONF_STATS
+        RPL_STAT(rpl_stats.dis_ext_out++);
+#endif /* RPL_CONF_STATS */
+        uip_icmp6_send_src(my_addr, get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+1+1+1);
+        if (sent_reset_topology_dependent_metric()==0) {
+          schedule_reset_topology_dependent_metric();
+        }
+#endif
+    }
+  } /* > OPERATE_AS_SENSOR */
+#endif /* SINK_ADDITION */
+
 #endif /* RPL_WITH_NON_STORING */
 }
 /*---------------------------------------------------------------------------*/
@@ -1800,16 +1889,6 @@ dao_output_target_seq(rpl_parent_t *parent, uip_ipaddr_t *prefix,
   buffer[pos++] = 0; /* path seq - ignored */
   buffer[pos++] = lifetime;
 
-#if (SINK_ADDITION >= 2)
-  buffer[pos++] = RPL_OPTION_TARGET_DESC;
-  buffer[pos++] = 4; /* flags - ignored */
-  memcpy(buffer + pos, &instance->current_dag->rank, sizeof(rpl_rank_t));
-  pos += sizeof(rpl_rank_t);
-  uint16_t tmp = (uint16_t) uip_ds6_nbr_num();
-  memcpy(buffer + pos, &tmp, sizeof(uint16_t));
-  pos += sizeof(uint16_t);
-#endif
-
   if(instance->mop != RPL_MOP_NON_STORING) {
     /* Send DAO to parent */
     dest_ipaddr = parent_ipaddr;
@@ -1822,6 +1901,28 @@ dao_output_target_seq(rpl_parent_t *parent, uip_ipaddr_t *prefix,
     /* Send DAO to root */
     dest_ipaddr = &parent->dag->dag_id;
   }
+
+#if (SINK_ADDITION >= 2)
+//printf("SA2 pos: %d lifetime: %u\n", pos, lifetime);
+  if (lifetime != RPL_ZERO_LIFETIME) {
+    buffer[pos++] = RPL_OPTION_TARGET_DESC;
+    buffer[pos++] = 4; /* flags - ignored */
+    uint16_t tmp = uip_htons(instance->current_dag->rank);
+    memcpy(buffer + pos, &tmp, sizeof(rpl_rank_t));
+    pos += sizeof(rpl_rank_t);
+    tmp = uip_htons((uint16_t) uip_ds6_nbr_num());
+    memcpy(buffer + pos, &tmp, sizeof(uint16_t));
+    pos += sizeof(uint16_t);
+/*    
+    memcpy(buffer + pos, &instance->current_dag->rank, sizeof(rpl_rank_t));
+    pos += sizeof(rpl_rank_t);
+    uint16_t tmp = (uint16_t) uip_ds6_nbr_num();
+    memcpy(buffer + pos, &tmp, sizeof(uint16_t));
+    pos += sizeof(uint16_t);
+//printf("!RPL_ZERO_LIFETIME pos:%d\n", pos);
+*/
+  }
+#endif
 
   PRINTF("RPL: Sending a %sDAO with sequence number %u, lifetime %u, prefix ",
          lifetime == RPL_ZERO_LIFETIME ? "No-Path " : "", seq_no, lifetime);

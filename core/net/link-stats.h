@@ -56,6 +56,7 @@ struct link_stats {
   uint32_t tx_deferred;       /* Counf of MAC_TX_DEFERRED */
   uint32_t tx_error;          /* Counf of TX error */
   uint32_t rx;                /* Counf of RX packets */
+  uint32_t rx_last;           /* Last RX packets used */
   uint32_t rx_bytes;          /* Counf of RX bytes */
   uint32_t rx_bytes_last;     /* Last RX bytes used for traffic metric */
 };
@@ -77,6 +78,7 @@ void print_link_stats(void);
 void calculate_traffic_metric(void);
 uint32_t get_received_traffic(void);
 uint32_t get_highest_traffic(void);
+uint32_t get_rx_highest(void);
 uint32_t get_tx_unique(void);
 uint32_t get_tx_all(void);
 uint32_t get_tx_rexmit(void);
