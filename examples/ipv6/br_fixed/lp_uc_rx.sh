@@ -18,15 +18,15 @@ BASE_TEST="/home/voravit/repo/current/main/contiki/examples/ipv6/br_fixed"
 cd $BASE_TEST
 
 START=`date "+%Y%m%d"`
-echo "mkdir ${START}_${SEED}_at_rank"
-mkdir ${START}_${SEED}_at_rank
+echo "mkdir ${START}_${SEED}_uc_rx"
+mkdir ${START}_${SEED}_uc_rx
 
-RATE=(2 3 4 5 6)
+RATE=(5 10 15 20 30)
 echo "### START TEST 16 NODES"
 for r in ${RATE[@]}
 do
 	echo "# rate: $r"
-	./at_rank.sh $r $SEED $VALUE
+	./uc_rx.sh $r $SEED $VALUE
 done
 
-mv at_rank_* ${START}_${SEED}_at_rank
+mv uc_rx_* ${START}_${SEED}_uc_rx

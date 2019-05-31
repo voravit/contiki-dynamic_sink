@@ -29,4 +29,4 @@ do
 	./uc_rxh.sh $r $SEED $VALUE
 done
 
-mv uc_rxh* ${START}_${SEED}_uc_rxh
+mv uc_rxh_* ${START}_${SEED}_uc_rxh

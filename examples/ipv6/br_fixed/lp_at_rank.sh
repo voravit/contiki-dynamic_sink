@@ -21,7 +21,7 @@ START=`date "+%Y%m%d"`
 echo "mkdir ${START}_${SEED}_at_rank"
 mkdir ${START}_${SEED}_at_rank
 
-RATE=(2 3 4 5 6)
+RATE=(5 10 15 20 30)
 echo "### START TEST 16 NODES"
 for r in ${RATE[@]}
 do

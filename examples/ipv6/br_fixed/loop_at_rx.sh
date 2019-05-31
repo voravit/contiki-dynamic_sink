@@ -29,4 +29,4 @@ do
 	./at_rx.sh $r $SEED $VALUE
 done
 
-mv at_rx* ${START}_${SEED}_at_rx
+mv at_rx_* ${START}_${SEED}_at_rx
