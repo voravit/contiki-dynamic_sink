@@ -63,17 +63,15 @@ struct powertrace_sniff_stats {
 #include "net/rpl/rpl-private.h"
 #define CPU 2.2
 #define LPM 0.0018
-//#define LPM_T 18
-//#define LPM_B 10000
 #define RX 18.5
 #define TX 33.6
-#else /* for SKY */
+/*
+#else // for SKY 
 #define CPU 1.8
 #define LPM 0.0545
-//#define LPM_T 545
-//#define LPM_B 10000
 #define RX 20
 #define TX 17.7
+*/
 #endif
 
 #define VOLTAGE 3
