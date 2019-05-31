@@ -35,29 +35,38 @@ int file_fd;
 char *server = SERVADDR;
 int debug = 0, daemonized = 1;
 char *cmd = NULL;
-//static uint8_t key_metric = 0x01; // tree size
-//static uint8_t key_metric = 0x02; // longest hop
-static uint8_t key_metric = 0x04; // received traffic
-//static uint8_t key_metric = 0x08; // highest traffic
 static int act = 0;
-//static int deact = 0;
 
 /*---------------------------------------------------------------------------*/
+#define ARRAY_LEN 6
+#define RX_TH_ACT 50
+#define RX_TH_DEACT 10
+#define NBR_TH_ACT 50
+#define NBR_TH_DEACT 10
+#define TH_NUM 3
 typedef struct candidate_sink {
   struct candidate_sink *next;
   struct sockaddr_in6 node_addr; 
   int activated;
-  int skip;
-  //struct sockaddr_in6 tun_addr; 
+  //int skip;
+  struct sockaddr_in6 tun_addr; 
   uint16_t rank;
   uint16_t num_neighbor;
   uint32_t tree_size;
   uint32_t longest_hop;
-  uint32_t rx_traffic;
-  uint32_t nbr_traffic;
-  uint32_t power;
+  uint32_t energy;
   uint32_t slip_in;
   uint32_t slip_out;
+
+  int last_arr_index;
+  uint16_t arr_rx[ARRAY_LEN];
+  uint16_t arr_nbr[ARRAY_LEN];
+  int rx_over;
+  int rx_under;
+  int nbr_over;
+  int nbr_under;
+  int holddown;
+
 } candidate_sink_t;
 candidate_sink_t *sink_table = NULL, *last_node = NULL;
 #define MAX_ACT_LIST 4
@@ -75,14 +84,16 @@ static int require_num = 0, curr_num = 0;
 void print_sink_list(candidate_sink_t *sink_table){
   char addr_str[INET6_ADDRSTRLEN];
   candidate_sink_t *current = sink_table;
-//printf("SINK_LIST:\n");
+printf("SINK_LIST:\n");
   while (current != NULL) {
-    printf("sink: %s ", inet_ntop(AF_INET6, &current->node_addr.sin6_addr, addr_str, INET6_ADDRSTRLEN));
-    //printf("tun: %s ", inet_ntop(AF_INET6, &current->tun_addr.sin6_addr, addr_str, INET6_ADDRSTRLEN));
-    printf("act: %d skip: %d ", current->activated, current->skip);
-    printf("rank: %u num_neighbor: %u ", current->rank, current->num_neighbor);
-    printf("size: %u hop: %u rx: %u nbr: %u ", current->tree_size, current->longest_hop, current->rx_traffic, current->nbr_traffic);
-    printf("slip_in: %u slip_out: %u power: %u\n", current->slip_in, current->slip_out, current->power);
+    printf("CS: %s ", inet_ntop(AF_INET6, &current->node_addr.sin6_addr, addr_str, INET6_ADDRSTRLEN));
+    printf("P: %s ", inet_ntop(AF_INET6, &current->tun_addr.sin6_addr, addr_str, INET6_ADDRSTRLEN));
+    printf("A: %d ", current->activated);
+    printf("R: %u N: %u S: %u H: %u ", current->rank, current->num_neighbor, current->tree_size, current->longest_hop);
+    printf("SI: %u SO: %u E: %u ", current->slip_in, current->slip_out, current->energy);
+    printf("I: %d HD: %d\n", current->last_arr_index, current->holddown);
+    printf("ARX: %u %u %u %u %u %u ", current->arr_rx[0], current->arr_rx[1], current->arr_rx[2], current->arr_rx[3], current->arr_rx[4], current->arr_rx[5]);
+    printf("ANB: %u %u %u %u %u %u\n", current->arr_nbr[0], current->arr_nbr[1], current->arr_nbr[2], current->arr_nbr[3], current->arr_nbr[4], current->arr_nbr[5]);
 
     current = current->next;
   }
@@ -99,29 +110,57 @@ candidate_sink_t *find_sink_list(candidate_sink_t *sink_table, struct sockaddr_i
   return NULL;
 }
 /*---------------------------------------------------------------------------*/
-int sink_addition_algorithm(candidate_sink_t *sink_table){
+int sink_selection_algorithm(candidate_sink_t *node){
   candidate_sink_t *current = sink_table;
   candidate_sink_t *hirank = NULL, *hinbr = NULL;
   int rx_over=0, rx_under=0;
+  int nbr_over=0, nbr_under=0;
   int rank_over=0;
-  int skip=0;
+  //int skip=0;
   int sink_total=0, sink_activated=0, sink_fixed=0;
-  uint32_t total_rx = 0;
+  uint32_t total_rx = 0, total_nbr = 0;
   int available = 0;
-  /* process through information */
+
+  /* update node */
+  node->rx_over = 0;
+  node->rx_under = 0;
+  node->nbr_over = 0;
+  node->nbr_under = 0;
+/*
+  for (int i=1; i<ARRAY_LEN; i++) {
+    if ((node->arr_rx[i]-node->arr_rx[0]) >= RX_TH_ACT) { node->rx_over++; }; 
+    if ((node->arr_rx[i]-node->arr_rx[0]) <= RX_TH_DEACT) { node->rx_under++; }; 
+    if ((node->arr_nbr[i]-node->arr_nbr[0]) >= NBR_TH_ACT) { node->nbr_over++; }; 
+    if ((node->arr_nbr[i]-node->arr_nbr[0]) <= NBR_TH_DEACT) { node->nbr_under++; }; 
+  }
+*/
+  for (int i=1; i<ARRAY_LEN; i++) {
+    if ((node->arr_rx[i]-node->arr_rx[i-1]) >= RX_TH_ACT) { node->rx_over++; }; 
+    if ((node->arr_rx[i]-node->arr_rx[i-1]) <= RX_TH_DEACT) { node->rx_under++; }; 
+    if ((node->arr_nbr[i]-node->arr_nbr[i-1]) >= NBR_TH_ACT) { node->nbr_over++; }; 
+    if ((node->arr_nbr[i]-node->arr_nbr[i-1]) <= NBR_TH_DEACT) { node->nbr_under++; }; 
+
+  }
+
+  /* Don't run algorithm if node is under holddown period */
+  if (node->holddown > 0) return 0;
+
+  /* run algorithm only if node is not under holddown period */
   while (current != NULL) {
     if (current->activated>0) {
-      total_rx += current->rx_traffic;
-      if ((current->rx_traffic >= MAX_RX_TRAFFIC)&&(current->skip==0)) rx_over++;
-      if (current->rx_traffic < MAX_RX_TRAFFIC*THRESHOLD) rx_under++;
+      total_rx += current->arr_rx[current->last_arr_index-1];
+      total_nbr += current->arr_nbr[current->last_arr_index-1];
+      if ((current->rx_over >= TH_NUM)&&(current->holddown==0)) rx_over++;
+      if ((current->rx_under >= TH_NUM)&&(current->holddown==0)) rx_under++;
+      if ((current->nbr_over >= TH_NUM)&&(current->holddown==0)) nbr_over++;
+      if ((current->nbr_under >= TH_NUM)&&(current->holddown==0)) nbr_under++;
       sink_activated++;
       if (current->activated>1) sink_fixed++;
     } else {
-      if (current->rank >= MAX_RANK) rank_over++;
+      //if (current->rank >= MAX_RANK) rank_over++;
       activate_list[available] = current;
       available++;
     }
-    //if (current->skip==1) current->skip = 0;
     sink_total++;
     current = current->next;
   } /* while (current != NULL) */
@@ -144,24 +183,26 @@ int sink_addition_algorithm(candidate_sink_t *sink_table){
       } /* sort j */
     } /* sort i */
 
-/*
 print_sink_list(sink_table);
   char tmp_addr_str[INET6_ADDRSTRLEN];
   for (int i=0; i<MAX_ACT_LIST; i++) {
     if (activate_list[i] != NULL) {
-      printf("%d S:%s K:%d A:%d R:%u NB:%u\n", i+1, inet_ntop(AF_INET6, &activate_list[i]->node_addr.sin6_addr, tmp_addr_str, INET6_ADDRSTRLEN), 
-	activate_list[i]->skip, activate_list[i]->activated, activate_list[i]->rank, activate_list[i]->num_neighbor);
+      printf("%d S:%s A:%d R:%u NB:%u ", i+1, inet_ntop(AF_INET6, &activate_list[i]->node_addr.sin6_addr, tmp_addr_str, INET6_ADDRSTRLEN), 
+	activate_list[i]->activated, activate_list[i]->rank, activate_list[i]->num_neighbor);
+        printf("ARX: %u %u %u %u %u %u ", activate_list[i]->arr_rx[0], activate_list[i]->arr_rx[1], activate_list[i]->arr_rx[2], activate_list[i]->arr_rx[3], activate_list[i]->arr_rx[4], activate_list[i]->arr_rx[5]);
+        printf("ANB: %u %u %u %u %u %u\n", activate_list[i]->arr_nbr[0], activate_list[i]->arr_nbr[1], activate_list[i]->arr_nbr[2], activate_list[i]->arr_nbr[3], activate_list[i]->arr_nbr[4], activate_list[i]->arr_nbr[5]);
     } else {
       printf("%d: NULL\n", i+1);
     }
   }
   printf("rank_over:%d rx_over:%d rx_under:%d total:%d act:%d fix:%d avail:%d\n", rank_over, rx_over, rx_under, sink_total, sink_activated, sink_fixed, available);
-*/    
 
   /* if we have an unactive sink, we activate it if needed */
-  //if ((rank_over>0)&&(sink_total>sink_activated)) return rank_over;
-  if (rank_over>0) return rank_over;
-  if ((rx_over>0) && (rx_over==sink_activated) && (available>0)) return 1;
+  //if (rank_over>0) return rank_over;
+  if ((rx_over>0) && (available>0)) {
+    node->holddown = 3; 
+    return 1;
+  }
 
   /* If there are more than one sink underutilize, we deactivate one */
   if ((sink_activated>sink_fixed) && (rx_under>1)) {
@@ -171,12 +212,13 @@ print_sink_list(sink_table);
       if (current->activated==1) {
 	if (deactivate_sink == NULL) { 
           deactivate_sink = current;
-        } else if (current->rx_traffic < deactivate_sink->rx_traffic) {
+        } else if (current->arr_rx[current->last_arr_index-1] < deactivate_sink->arr_rx[deactivate_sink->last_arr_index-1]) {
           deactivate_sink = current;
         }
       } 
       current = current->next;
     }
+    node->holddown = 3; 
     return -1;
   }
   return 0;
@@ -248,7 +290,7 @@ int process(void)
 
   //candidate_sink_t *sink_ptr = NULL;
   static int ctr=0;
-  static int skip=0;
+  //static int skip=0;
 
   /* for activation/deactivation */
   struct timeval timeout = {5, 0}; 
@@ -326,6 +368,7 @@ int process(void)
         continue;
       } 
 
+      candidate_sink_t *node = NULL;
       switch ((flags &0x30)>>4) {
         case(0): /* register */
           if (debug) printf("flags: %02hhX register\n", flags);
@@ -334,22 +377,23 @@ int process(void)
           if (debug) printf("candidate sink: %s\n", inet_ntop(AF_INET6, &sink_addr.sin6_addr, sink_addr_str, INET6_ADDRSTRLEN));
 
 printf("REGISTER: %s ", inet_ntop(AF_INET6, &sink_addr.sin6_addr, sink_addr_str, INET6_ADDRSTRLEN));
-          if (find_sink_list(sink_table, &sink_addr)==NULL) {
+          node = find_sink_list(sink_table, &sink_addr);
+          if (node == NULL) {
 printf("added");
             /* create new sink element */
 	    uint16_t tmp;
-            candidate_sink_t *node = NULL;
             node = malloc(sizeof(candidate_sink_t));
             node->next = NULL;
+            memcpy(&node->tun_addr, &tmp_addr, sizeof(tmp_addr));
             memcpy(&node->node_addr, &sink_addr, sizeof(sink_addr));
             memcpy(&tmp, &buf[6], sizeof(uint16_t));
             node->rank = (uint16_t) ntohs(tmp);
             memcpy(&tmp, &buf[8], sizeof(uint16_t));
             node->num_neighbor = (uint16_t) ntohs(tmp);
 printf(" rank: %u nbr: %u", node->rank, node->num_neighbor);
-            node->skip = 1;
-            //if (strcmp(inet_ntop(AF_INET6, &sink_addr.sin6_addr, tmp_addr_str, INET6_ADDRSTRLEN), FIXED_SINK)==0) {
-            if (memcmp(&sink_addr.sin6_addr,&tmp_addr.sin6_addr, sizeof(sink_addr.sin6_addr))==0) {
+            //node->skip = 1;
+            if (strcmp(inet_ntop(AF_INET6, &sink_addr.sin6_addr, tmp_addr_str, INET6_ADDRSTRLEN), FIXED_SINK)==0) {
+            //if (memcmp(&sink_addr.sin6_addr,&tmp_addr.sin6_addr, sizeof(sink_addr.sin6_addr))==0) {
               node->activated = 2; 
 printf(" fixed-sink\n");
             } else {
@@ -366,8 +410,15 @@ printf("\n");
               if (debug) print_sink_list(sink_table);
             } else {
               /* sink is already in sink_list */
-printf("exist\n");
-              if (debug) printf("%s is already registered\n", inet_ntop(AF_INET6, &sink_addr.sin6_addr, sink_addr_str, INET6_ADDRSTRLEN));
+printf("updated");
+	        uint16_t tmp;
+                memcpy(&node->tun_addr, &tmp_addr, sizeof(tmp_addr));
+                memcpy(&tmp, &buf[6], sizeof(uint16_t));
+                node->rank = (uint16_t) ntohs(tmp);
+                memcpy(&tmp, &buf[8], sizeof(uint16_t));
+                node->num_neighbor = (uint16_t) ntohs(tmp);
+printf(" rank: %u nbr: %u\n", node->rank, node->num_neighbor);
+                //if (debug) printf("%s is already registered\n", inet_ntop(AF_INET6, &sink_addr.sin6_addr, sink_addr_str, INET6_ADDRSTRLEN));
             }
 
             /* prepare register ack packet */
@@ -419,6 +470,7 @@ printf("exist\n");
             if (node != NULL) {
               if (node->activated == 0) {
                 node->activated = 1;
+                node->holddown = 5;
                 act++;
                 if (require_num <= act) {
                   require_num = 0;
@@ -451,11 +503,12 @@ printf("exist\n");
             //printf("RECEIVE DEACTIVATION ACK\n");
             printf("RECEIVE DEACTIVATION ACK %s\n", inet_ntop(AF_INET6, &tmp_addr.sin6_addr, tmp_addr_str, INET6_ADDRSTRLEN));
           
-            candidate_sink_t *node = NULL;
+            //candidate_sink_t *node = NULL;
             node = find_sink_list(sink_table, &tmp_addr);
             if (node != NULL) {
               if (node->activated > 0) {
                 node->activated = 0;
+                node->holddown = 5;
                 node->rank = 0;
                 //if (require_num < 0) { require_num++; deactivate_sink = NULL; }
 		require_num = 0;
@@ -482,101 +535,70 @@ printf("exist\n");
 
 printf("REPORT: %s ", inet_ntop(AF_INET6, &tmp_addr.sin6_addr, tmp_addr_str, INET6_ADDRSTRLEN));
           /* update metric on sink_list */
-          candidate_sink_t *node = NULL;
-          uint8_t metric_flags;
-          memcpy(&metric_flags, &buf[6], sizeof(metric_flags));
-
-	  /* special case: the active sink report for candidate sink */
-	  if ((metric_flags&0x08)==0x08) {
-	    memcpy(&tmp_addr.sin6_addr, &buf[11], sizeof(tmp_addr.sin6_addr));
-            //memcpy(&tmp_addr, &buf[11], sizeof(tmp_addr));
-printf("FOR SINK: %s ", inet_ntop(AF_INET6, &tmp_addr.sin6_addr, tmp_addr_str, INET6_ADDRSTRLEN));
-          }
-
+          //candidate_sink_t *node = NULL;
           node = find_sink_list(sink_table, &tmp_addr);
           if (node!=NULL) {
-            int index = 7; /* start of payload */
+            int index = 6; /* start of payload */
             uint8_t f = 0x01;
-            uint32_t tmp_value;
-            uint16_t tmp;
+            uint16_t tmp16;
+            uint32_t tmp32;
+            uint16_t tmp_rx;
+            uint16_t tmp_nbr;
             int periodic_print = 0;
-printf("M:%02hhX\n", metric_flags);
-            while ((f!=0x00)&&(metric_flags!=0xff)) {
-//if (debug) printf("metric_flags: %02hhX f: %02hhX\n", metric_flags, f);
-	      switch (metric_flags&f) {
-		case(0x01):
-		  memcpy(&node->tree_size, &buf[index], 1);
-		  index++;
-		  memcpy(&node->longest_hop, &buf[index], 1);
-		  index++;
-		  break;
-		case(0x02):
-		  memcpy(&tmp_value, &buf[index], 4);
-		  node->rx_traffic = ntohl(tmp_value);
-		  index+=4;
-		  memcpy(&tmp_value, &buf[index], 4);
-		  node->nbr_traffic = ntohl(tmp_value);
-		  index+=4;
-		  memcpy(&tmp_value, &buf[index], 4);
-		  node->slip_in = ntohl(tmp_value);
-		  index+=4;
-		  memcpy(&tmp_value, &buf[index], 4);
-		  node->slip_out = ntohl(tmp_value);
-		  index+=4;
-		  break;
-		case(0x04):
-		  memcpy(&tmp_value, &buf[index], 4);
-		  node->power = ntohl(tmp_value);
-		  index+=4;
-                  ctr++; 
-                  if (ctr%5==0) periodic_print=1;
-		  break;
-		case(0x08):
-		  memcpy(&node->rank, &buf[index], 2);
-		  index+=2;
-		  memcpy(&node->num_neighbor, &buf[index], 2);
-		  index+=2;
-		  break;
-		default:
-		  break;
-	      } /* switch (metric_flags&f) */
-	      f = f<<1;
-            } /* while ((f!=0x00)&&(metric_flags!=0xff)) */
+	    memcpy(&node->tree_size, &buf[index], 1);
+	    index++;
+	    memcpy(&node->longest_hop, &buf[index], 1);
+	    index++;
+            memcpy(&tmp16, &buf[index], 2);
+	    tmp_rx = ntohs(tmp16);
+            index+=2;
+            memcpy(&tmp16, &buf[index], 2);
+	    tmp_nbr = ntohs(tmp16);
+            index+=2;
+            memcpy(&tmp32, &buf[index], 4);
+	    node->energy = ntohs(tmp32);
+            index+=4;
+            memcpy(&tmp32, &buf[index], 4);
+	    node->slip_in = ntohs(tmp32);
+            index+=4;
+            memcpy(&tmp32, &buf[index], 4);
+	    node->slip_out = ntohs(tmp32);
+            index+=4;
 
+printf("tree: %u hop: %u rx: %u nbr: %u enr: %u sin: %u sout: %u\n", node->tree_size, node->longest_hop, tmp_rx, tmp_nbr, node->energy, node->slip_in, node->slip_out);
+	    if (node->last_arr_index < ARRAY_LEN) {
+	      node->arr_rx[node->last_arr_index] = tmp_rx;
+	      node->arr_nbr[node->last_arr_index] = tmp_nbr;
+	      node->last_arr_index++;
+	    } else {
+	      for (int i=1; i<ARRAY_LEN; i++) {
+		node->arr_rx[i-1] = node->arr_rx[i];
+	      }
+	      node->arr_rx[ARRAY_LEN-1] = tmp_rx;
+	      node->arr_nbr[ARRAY_LEN-1] = tmp_nbr;
+	    }
+		  
             if (periodic_print) {
               printf("CTR:%d\n", ctr);
               print_sink_list(sink_table);
               periodic_print = 0;
             }
 
-            if (((metric_flags&0x02)==0x02) && (node->skip)) {
-              /* first traffic report tends to be too high over our threshold
-               * so we don't run algorithm on this to avoid unnecessary sink activation */
-              printf("We don't run the algorithm on the first traffic report\n");
-              node->skip=0;
-	      skip = 1;
-              break;
+	    if (node->holddown > 0) node->holddown--;
+            /* run algorithm to find sinks to activate/deactivate 
+             * we may activate more than 1 sink but deactivate only one sink at a time 
+             * algorithm return 0: no action, N: activate N sink, and -1: deactivate 1 sink
+             */
+            if ((require_num == 0) && (act == 0) && (node->last_arr_index >= ARRAY_LEN)) {
+              require_num = sink_selection_algorithm(node);
+              curr_num = 0;
+	      if (debug) printf("require_num: %d\n", require_num);
             }
+
           } else {
             printf("ignore report: no match candidate sink\n");
             break;
           }
-
-          /* run algorithm to find sinks to activate/deactivate 
-           * we may activate more than 1 sink but deactivate only one sink at a time 
-           * algorithm return 0: no action, N: activate N sink, and -1: deactivate 1 sink
-           */
-          if (skip) {
-	    skip = 0;
-	  } else {
-          if ((require_num == 0) && (act == 0)) {
-            require_num = sink_addition_algorithm(sink_table);
-            curr_num = 0;
-printf("require_num: %d\n", require_num);
-          }
-	  }
-
-if (debug) printf("require number of sink: %d\n", require_num);
 
           if (require_num > 0) {
 activate_now:
@@ -739,7 +761,6 @@ void usage(void)
   printf("\ncoordinator [-d] [-f file] [-c command ipv6] [-s ipv6]\n");
   printf(" -d               -- debug mode\n");
   printf(" -f filename      -- local logfile. Default is %s\n", LOGFILE);
-  printf(" -m metric        -- 1.tree_size 2.longest_hop 3.rx_traffic 4.nbr_traffic\n");
   printf(" -c command ipv6  -- send a command to a server ipv6 address\n");
   printf(" -s ipv6          -- specify server IPv6 address\n");
 //  printf("IMPORTANT:\n");
@@ -761,8 +782,6 @@ int main(int argc,char **argv)
       debug = 1;
     else if (strncmp(argv[i], "-f", 2) == 0)
       filename = argv[++i];
-    else if (strncmp(argv[i], "-m", 2) == 0)
-      key_metric = (uint8_t)atoi(argv[++i]);
     else if (strncmp(argv[i], "-s", 2) == 0)
       server = argv[++i];
     else if (strncmp(argv[i], "-c", 2) == 0) {
