@@ -96,6 +96,7 @@ PROCESS_THREAD(rpl_parent_queue_process, ev, data)
 
   static struct etimer periodic;
   static int ctr = 0;
+  static int q_now = 0;
   static rpl_parent_t *last = NULL;
 
   PROCESS_BEGIN();
@@ -107,18 +108,23 @@ PROCESS_THREAD(rpl_parent_queue_process, ev, data)
     if(etimer_expired(&periodic)) {
       ctr++;
       if (default_instance != NULL) {
-        int q_now = neighbor_queue_length(rpl_get_parent_lladdr(default_instance->current_dag->preferred_parent));
-        if (default_instance->current_dag->preferred_parent != last) {
-          last = default_instance->current_dag->preferred_parent;
-          qema = q_now;
+	if (default_instance->current_dag->preferred_parent != NULL) {
+          q_now = neighbor_queue_length(rpl_get_parent_lladdr(default_instance->current_dag->preferred_parent));
+          if (default_instance->current_dag->preferred_parent != last) {
+            last = default_instance->current_dag->preferred_parent;
+            qema = q_now;
+          } else {
+            qema = ALPHA*q_now + (1-ALPHA)*qema;
+          }
         } else {
+	  q_now = 0;
           qema = ALPHA*q_now + (1-ALPHA)*qema;
         }
 #if UIP_CONF_STATISTICS
 if (default_instance->current_dag->preferred_parent != NULL) {
   printf("QN: %d QNOW: %d QEMA: %d RANK: %u PRN: %02x RX: %u TX: %u FW: %u ETX: %u\n", ctr, q_now, qema, default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], uip_stat.ip.recv, uip_stat.ip.sent, uip_stat.ip.forwarded, rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
 } else {
-  printf("QN: %d QNOW: %d QEMA: %d RANK: %u PRN: 00 RX: %u TX: %u FW: %u ETX: %u\n", ctr, q_now, qema, default_instance->current_dag->rank, uip_stat.ip.recv, uip_stat.ip.sent, uip_stat.ip.forwarded, rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
+  printf("QN: %d QNOW: %d QEMA: %d RANK: %u PRN: 00 RX: %u TX: %u FW: %u ETX: 000\n", ctr, q_now, qema, default_instance->current_dag->rank, uip_stat.ip.recv, uip_stat.ip.sent, uip_stat.ip.forwarded);
 }
 #else
 printf("QN: %d QNOW: %d QEMA: %d RANK: %u PRN: %02x ETX: %u\n", ctr, q_now, qema, default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);

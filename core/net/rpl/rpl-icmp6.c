@@ -76,6 +76,14 @@ static rpl_rank_t last_sensor_rank = 0;
 static uint8_t register_acked = 0;
 #endif
 /*---------------------------------------------------------------------------*/
+#if (SINK_ADDITION == 3)
+uint8_t
+get_register_acked(void)
+{
+  return register_acked;
+}
+#endif
+/*---------------------------------------------------------------------------*/
 #if (SINK_ADDITION == 2)
 typedef struct candidate_sink {
   struct candidate_sink *next;
@@ -392,6 +400,7 @@ dis_input(void)
               for(key = list_head(candidate_sink_list); key != NULL; key = list_item_next(key)) {
                 if (uip_ipaddr_cmp(&key->node_addr, &from)){
                   key->activated = 1;
+		  reset_filled();
                 }
               } 
               show_candidate_sink_list();
@@ -467,6 +476,7 @@ dis_input(void)
               for(key = list_head(candidate_sink_list); key != NULL; key = list_item_next(key)) {
                 if (uip_ipaddr_cmp(&key->node_addr, &from)){
                   key->activated = 0;
+		  reset_filled();
                 }
               } 
               show_candidate_sink_list();
@@ -576,47 +586,14 @@ dis_output(uip_ipaddr_t *addr)
   uip_icmp6_send(addr, ICMP6_RPL, RPL_CODE_DIS, 2);
 }
 /*---------------------------------------------------------------------------*/
-/* report power only in coordinated sinks scenario */
 #if (SINK_ADDITION == 3)
-#if WITH_COMPOWER
-void 
-dis_report_power_output(uint32_t cpu, uint32_t radio)
-{
-  static uip_ipaddr_t *my_addr;
-  char payload[128];
-  unsigned char *buffer;
-  uint32_t power;
-
-  my_addr = rpl_get_src_addr();
-  payload[0] = 0x90;
-  payload[1] = 0x00;
-//  payload[2] = 0x10;
-  payload[2] = 0x04;
-
-  /* power here is mJ*100, receiver must /100 to get mJ */
-  power = uip_htonl(cpu + radio);
-  memcpy(&payload[3],&power,4);
-
-  uip_clear_buf();
-  buffer = UIP_ICMP_PAYLOAD;
-  memcpy(buffer,&payload,7);
-
-#if RPL_CONF_STATS
-  RPL_STAT(rpl_stats.dis_ext_out++);
-#endif /* RPL_CONF_STATS */
-  uip_icmp6_send_src(my_addr, get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+1+4);
-}
-#endif /* WITH_COMPOWER */
-#endif /* SINK_ADDITION == 3 */
-
-/*---------------------------------------------------------------------------*/
-#if (SINK_ADDITION == 3)
-static void
+void
 dis_register_output(uip_ipaddr_t *candidate_sink, rpl_rank_t my_rank, uint16_t num_neighbor)
 {
   unsigned char *buffer;
   uint16_t tmp;
 
+  uip_clear_buf();
   buffer = UIP_ICMP_PAYLOAD;
   buffer[0] = 0x80;
   buffer[1] = 0;
@@ -624,73 +601,27 @@ dis_register_output(uip_ipaddr_t *candidate_sink, rpl_rank_t my_rank, uint16_t n
 #if RPL_CONF_STATS
   RPL_STAT(rpl_stats.dis_ext_out++);
 #endif /* RPL_CONF_STATS */
-
   if (candidate_sink == NULL) {
+//printf("REG: CS: NULL rank: %u nbr: %u\n", my_rank, num_neighbor);
     tmp = uip_htons(my_rank);
     memcpy(&buffer[2], &tmp, sizeof(rpl_rank_t));
     tmp = uip_htons(num_neighbor);
     memcpy(&buffer[4], &tmp, sizeof(uint16_t));
-    uip_icmp6_send(get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+4);
+    memcpy(&buffer[6], rpl_get_src_addr(), sizeof(uip_ipaddr_t));
+    uip_icmp6_send_src(rpl_get_src_addr(), get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+4+sizeof(uip_ipaddr_t));
+    //uip_icmp6_send(get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+4+sizeof(uip_ipaddr_t));
   } else {
+//printf("REG: CS: %02x rank: %u nbr: %u\n", candidate_sink->u8[15], my_rank, num_neighbor);
     tmp = uip_htons(my_rank);
     memcpy(&buffer[2], &tmp, sizeof(rpl_rank_t));
     tmp = uip_htons(num_neighbor);
     memcpy(&buffer[4], &tmp, sizeof(uint16_t));
     memcpy(&buffer[6], candidate_sink, sizeof(uip_ipaddr_t));
-    //uip_icmp6_send_src(rpl_get_src_addr(), dest, ICMP6_RPL, RPL_CODE_DIS, 2+4+sizeof(uip_ipaddr_t));
-    uip_icmp6_send(get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+4+sizeof(uip_ipaddr_t));
+    uip_icmp6_send_src(rpl_get_src_addr(), get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+4+sizeof(uip_ipaddr_t));
+    //uip_icmp6_send(get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+4+sizeof(uip_ipaddr_t));
   }
 }
 #endif /* SINK_ADDITION == 3 */
-/*---------------------------------------------------------------------------*/
-#if 0
-void
-dis_trigger_activation_output(void) {
-  static uip_ds6_defrt_t *defrt=NULL;
-  rpl_dag_t *dag;
-  unsigned char *buffer;
-
-  /* send DAO to remove route from the preferred parent */
-  dao_output(default_instance->current_dag->preferred_parent, RPL_ZERO_LIFETIME);
-  /* remove default route */
-  defrt = uip_ds6_defrt_lookup(uip_ds6_defrt_choose());
-  if (defrt != NULL) {
-    uip_ds6_defrt_rm(defrt);
-  }
-
-  printf("%lu ", clock_time());
-  printf("ROUTE ADD: ");
-  uip_debug_ipaddr_print(rpl_get_src_addr());
-  printf("\n");
-
-  /* setting RPL DODAG root with virtual root address */
-#ifdef ROOT_VIRTUAL
-  uip_ds6_addr_add(get_vr_addr(), 0, ADDR_MANUAL);
-#endif
-  last_sensor_rank = default_instance->current_dag->rank;
-  dag = rpl_set_root(RPL_DEFAULT_INSTANCE, get_vr_addr());
-  if(dag != NULL) {
-    rpl_set_prefix(dag, get_vr_addr(), 64);
-    PRINTF("created a new RPL dag\n");
-  }
-
-  set_operate_mode(SINK_ADDITION);
-  printf("operate mode: %d\n", get_operate_mode());
-  NETSTACK_MAC.off(1);
-
-  /* send DIS ACTIVATION ACK to inform the coordinator */
-  buffer = UIP_ICMP_PAYLOAD;
-  buffer[0] = 0xE0;
-  buffer[1] = 0; 
-
-#if RPL_CONF_STATS
-  RPL_STAT(rpl_stats.dis_ext_out++);
-#endif /* RPL_CONF_STATS */
-
-  printf("DIS2:%02x SEND ACTIVATION ACK \n", UIP_ICMP_PAYLOAD[0]);
-  uip_icmp6_send_src(rpl_get_src_addr(), get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2);
-}
-#endif /* SINK_ADDITION */
 /*---------------------------------------------------------------------------*/
 static void
 dio_input(void)
@@ -1385,84 +1316,25 @@ fwd_dao:
     }
   }
 
-#if (SINK_ADDITION >= 1)
-  /* send metric info to coordinator */
 #if (SINK_ADDITION == 3)
-  int need_report=0;
-#endif
+  if (cs_info) {
+#if RPL_CONF_STATS
+    RPL_STAT(rpl_stats.dis_ext_out++);
+#endif /* RPL_CONF_STATS */
+    dis_register_output(&dao_sender_addr, cs_rank, cs_num_neighbor);
+  }
+#endif /* SINK_ADDITION == 3 */
+
+#if (SINK_ADDITION >= 1)
   if (get_operate_mode() > OPERATE_AS_SENSOR) {
     if (default_instance != NULL) {
-      /* send a report only when metric reaches threshold and grows larger */
-      if ((lifetime!=RPL_ZERO_LIFETIME) &&
-          (uip_ds6_nbr_num() >= SINK_METRIC_TREE_SIZE) && 
-          (uip_ds6_nbr_num() > default_instance->tree_size)) {
-#if (SINK_ADDITION == 3)
-        need_report = 1;
-#endif
-      }
-      if ((lifetime!=RPL_ZERO_LIFETIME) &&
-          (UIP_TTL-ttl+1 >= SINK_METRIC_LONGEST_HOP) &&
-          (UIP_TTL-ttl+1 > default_instance->longest_hop)) {
-#if (SINK_ADDITION == 3)
-        need_report = 1;
-#endif
-      }
-
       default_instance->tree_size = uip_ds6_nbr_num();
       if (UIP_TTL-ttl+1 > default_instance->longest_hop) {
         default_instance->longest_hop = UIP_TTL-ttl+1;
       }
     }
-
-#if (SINK_ADDITION == 3)
-      static uip_ipaddr_t *my_addr;
-      char payload[128];
-      my_addr = rpl_get_src_addr();
-
-    if (cs_info) {
-      payload[0] = 0x90;
-      payload[1] = 0x00;
-      payload[2] = 0x08;
-
-      tmp = uip_htons(cs_rank);
-      memcpy(&payload[3], &tmp, sizeof(rpl_rank_t));
-      tmp = uip_htons((uint16_t) cs_num_neighbor);
-      memcpy(&payload[5], &tmp, sizeof(uint16_t));
-      memcpy(&payload[7], &prefix, sizeof(uip_ipaddr_t)); 
-
-      uip_clear_buf();
-      buffer = UIP_ICMP_PAYLOAD;
-      memcpy(buffer,&payload,3+4+sizeof(uip_ipaddr_t));
-#if RPL_CONF_STATS
-  RPL_STAT(rpl_stats.dis_ext_out++);
-#endif /* RPL_CONF_STATS */
-      uip_icmp6_send_src(rpl_get_src_addr(), get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 3+4+sizeof(uip_ipaddr_t));
-    }
-
-    if (need_report) {
-      payload[0] = 0x90;
-      payload[1] = 0x00;
-      payload[2] = 0x01;
-      memcpy(&payload[3],&default_instance->tree_size,1); 
-      memcpy(&payload[4],&default_instance->longest_hop,1); 
-
-      uip_clear_buf();
-      buffer = UIP_ICMP_PAYLOAD;
-      memcpy(buffer,&payload,5);
-
-#if RPL_CONF_STATS
-  RPL_STAT(rpl_stats.dis_ext_out++);
-#endif /* RPL_CONF_STATS */
-      uip_icmp6_send_src(my_addr, get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+1+1+1);
-      if (sent_reset_topology_dependent_metric()==0) {
-        schedule_reset_topology_dependent_metric();
-      }
-      need_report=0;
-    }
-#endif /* #if (SINK_ADDITION == 3) */
   } /* get_operate_mode() */
-#endif /* #if (SINK_ADDITION >= 2) */
-
+#endif /* #if (SINK_ADDITION >= 1) */
 #endif /* RPL_WITH_STORING */
 }
 /*---------------------------------------------------------------------------*/
@@ -1557,6 +1429,7 @@ dao_input_nonstoring(void)
         break;
       case RPL_OPTION_TARGET_DESC:
         /* candidate sink sends rank and num_neighbor in DAO */
+printf("RPL_OPTION_TARGET_DESC: %02x\n", dao_sender_addr.u8[15]);
 #if (SINK_ADDITION == 2)
         node = find_sink_in_list(&dao_sender_addr);
   	uint16_t tmp;
@@ -1623,6 +1496,7 @@ dao_input_nonstoring(void)
   }
 
 #if (SINK_ADDITION == 3)
+//printf("cs_info: %d cs: %02x rank: %u nbr: %u\n", cs_info, dao_sender_addr.u8[15], cs_rank, cs_num_neighbor);
   if (cs_info) {
 #if RPL_CONF_STATS
     RPL_STAT(rpl_stats.dis_ext_out++);
@@ -1639,32 +1513,6 @@ dao_input_nonstoring(void)
           default_instance->longest_hop = UIP_TTL-ttl+1;
         }
       }
-    }
-
-    if ((default_instance->tree_size >= SINK_METRIC_TREE_SIZE)||
-        (default_instance->longest_hop >= SINK_METRIC_LONGEST_HOP)) {
-#if (SINK_ADDITION == 2)
-// TBD: activate another sink
-#endif
-#if (SINK_ADDITION == 3)
-        payload[0] = 0x90;
-        payload[1] = 0x00;
-        payload[2] = 0x01;
-        memcpy(&payload[3],&default_instance->tree_size,1);
-        memcpy(&payload[4],&default_instance->longest_hop,1);
-  
-        uip_clear_buf();
-        buffer = UIP_ICMP_PAYLOAD;
-        memcpy(buffer,&payload,5);
-  
-#if RPL_CONF_STATS
-        RPL_STAT(rpl_stats.dis_ext_out++);
-#endif /* RPL_CONF_STATS */
-        uip_icmp6_send_src(my_addr, get_coordinator_addr(), ICMP6_RPL, RPL_CODE_DIS, 2+1+1+1);
-        if (sent_reset_topology_dependent_metric()==0) {
-          schedule_reset_topology_dependent_metric();
-        }
-#endif
     }
   } /* > OPERATE_AS_SENSOR */
 #endif /* SINK_ADDITION */

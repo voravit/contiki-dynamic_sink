@@ -199,6 +199,12 @@ handle_dio_timer(void *ptr)
 
   instance = (rpl_instance_t *)ptr;
 
+#if (SINK_ADDITION == 3)
+  if ((get_operate_mode() > OPERATE_AS_SENSOR)&&(!get_register_acked())) {
+    dis_register_output(NULL, instance->current_dag->rank, (uint16_t)uip_ds6_nbr_num());
+  }
+#endif /* SINK_ADDITION == 3 */
+
   PRINTF("RPL: DIO Timer triggered\n");
   if(!dio_send_ok) {
     if(uip_ds6_get_link_local(ADDR_PREFERRED) != NULL) {

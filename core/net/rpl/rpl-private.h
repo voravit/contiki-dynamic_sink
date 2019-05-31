@@ -364,13 +364,9 @@ void dao_ack_output(rpl_instance_t *, uip_ipaddr_t *, uint8_t, uint8_t);
 void rpl_icmp6_register_handlers(void);
 uip_ds6_nbr_t *rpl_icmp6_update_nbr_table(uip_ipaddr_t *from,
                                           nbr_table_reason_t r, void *data);
-//#if (SINK_ADDITION >= 2)
-//uint8_t get_register_acked(void);
-//void set_register_acked(void);
-//void dis_register_output(uip_ipaddr_t *candidate_sink, rpl_rank_t my_rank, uint16_t num_neighbor);
-//#endif
-#if WITH_COMPOWER
-void dis_report_power_output(uint32_t cpu, uint32_t radio);
+#if (SINK_ADDITION == 3)
+uint8_t get_register_acked(void);
+void dis_register_output(uip_ipaddr_t *candidate_sink, rpl_rank_t my_rank, uint16_t num_neighbor);
 #endif 
 #if (SINK_ADDITION == 2)
 void init_candidate_sink_list(void);
@@ -433,6 +429,9 @@ void schedule_reset_topology_dependent_metric(void);
 uint8_t status_rpl_metric_timer(void);
 void start_rpl_metric_timer(void);
 void stop_rpl_metric_timer(void);
+#endif
+#if (SINK_ADDITION == 2)
+void reset_filled(void);
 #endif
 
 #if SINK_ADDITION || SENSOR_PRINT

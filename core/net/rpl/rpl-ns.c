@@ -50,7 +50,8 @@
 
 #if RPL_WITH_NON_STORING
 
-#define DEBUG DEBUG_NONE
+#define DEBUG DEBUG_PRINT
+//#define DEBUG DEBUG_NONE
 #include "net/ip/uip-debug.h"
 
 #include <limits.h>
@@ -170,6 +171,11 @@ rpl_ns_update_node(rpl_dag_t *dag, const uip_ipaddr_t *child, const uip_ipaddr_t
   } else {
     child_node->parent = parent_node;
   }
+
+PRINTF("%lu ", clock_time());
+PRINTF("ROUTE ADD: ");
+PRINT6ADDR(child);
+PRINTF("\n");
 
   return child_node;
 }
