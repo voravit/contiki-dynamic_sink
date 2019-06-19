@@ -1328,7 +1328,7 @@ fwd_dao:
 #if (SINK_ADDITION >= 1)
   if (get_operate_mode() > OPERATE_AS_SENSOR) {
     if (default_instance != NULL) {
-      default_instance->tree_size = uip_ds6_nbr_num();
+      default_instance->tree_size = uip_ds6_route_num_routes();
       if (UIP_TTL-ttl+1 > default_instance->longest_hop) {
         default_instance->longest_hop = UIP_TTL-ttl+1;
       }
@@ -1508,7 +1508,7 @@ printf("RPL_OPTION_TARGET_DESC: %02x\n", dao_sender_addr.u8[15]);
   if (get_operate_mode() > OPERATE_AS_SENSOR) {
     if (default_instance != NULL) {
       if (lifetime != RPL_ZERO_LIFETIME) {
-        default_instance->tree_size = uip_ds6_nbr_num();
+        default_instance->tree_size = rpl_ns_num_nodes();
         if (UIP_TTL-ttl+1 > default_instance->longest_hop) {
           default_instance->longest_hop = UIP_TTL-ttl+1;
         }
