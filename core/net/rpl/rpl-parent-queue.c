@@ -102,7 +102,7 @@ PROCESS_THREAD(rpl_parent_queue_process, ev, data)
   PROCESS_BEGIN();
   PROCESS_PAUSE();
 
-  etimer_set(&periodic, (5*CLOCK_SECOND));
+  etimer_set(&periodic, (1*CLOCK_SECOND));
   while(1) {
     PROCESS_WAIT_EVENT();
     if(etimer_expired(&periodic)) {
