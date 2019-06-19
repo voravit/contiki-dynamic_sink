@@ -115,7 +115,7 @@ PROCESS_THREAD(rpl_metric_timer_process, ev, data)
 #endif /* SINK_ADDITION */
 #if (SINK_ADDITION == 1)
 #if !SINK_FIXED
-  //static uip_ipaddr_t *my_addr;
+  static uip_ipaddr_t *my_addr;
   static rpl_rank_t last_sensor_rank = 0;
   static uip_ds6_defrt_t *defrt=NULL;
   rpl_dag_t *dag;
@@ -194,13 +194,13 @@ PROCESS_THREAD(rpl_metric_timer_process, ev, data)
       int arr_rxh_over = 0;
       if (default_instance != NULL) {
         if (rxh_filled <= ARRAY_LEN) {
-          arr_rxh[filled-1] = get_rx_highest();
+          arr_rxh[filled-1] = get_nbr_highest();
         }
         if (rxh_filled > ARRAY_LEN) {
           for (i=0; i < ARRAY_LEN-1; i++) {
             arr_rxh[i] = arr_rxh[i+1];
           }
-          arr_rxh[ARRAY_LEN-1] = get_rx_highest();
+          arr_rxh[ARRAY_LEN-1] = get_nbr_highest();
 
           for (i=0; i < ARRAY_LEN; i++) { if (arr_rxh[i] >= ARR_RXH_TH) { arr_rxh_over++; } }
         }
@@ -221,7 +221,7 @@ PROCESS_THREAD(rpl_metric_timer_process, ev, data)
           memcpy(&payload[3], &default_instance->longest_hop, 1); 
 	  tmp16 = uip_htons(last_recv);
           memcpy(&payload[4], &tmp16, 2); 
-	  tmp16 = uip_htons((uint16_t)get_rx_highest());
+	  tmp16 = uip_htons((uint16_t)get_nbr_highest());
           memcpy(&payload[6], &tmp16, 2); 
 	  tmp32 = uip_htonl(default_instance->energy);
           memcpy(&payload[8], &tmp32, 4); 
@@ -318,7 +318,7 @@ PROCESS_THREAD(rpl_metric_timer_process, ev, data)
 /*---------------------------------------------------------------------------*/
 #if (SINK_ADDITION == 1) /* AUTONOMOUS: activate sink functionalities */
 #if !SINK_FIXED
-      //my_addr = rpl_get_src_addr();
+      my_addr = rpl_get_src_addr();
 if ((count == (3+10)) && ((my_addr->u8[15]) <= 3)) {
 //if ((filled >= ARRAY_LEN) && (arr_rank_over >= 3)) {
 //if ((filled >= ARRAY_LEN) && (arr_etx_over >= 3)) {

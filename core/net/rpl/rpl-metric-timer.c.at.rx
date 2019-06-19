@@ -123,6 +123,7 @@ PROCESS_THREAD(rpl_metric_timer_process, ev, data)
 #endif /* SINK_ADDITION == 1 */
 #if (SINK_ADDITION >= 2)
 #define ARR_RXH_TH 50
+#define ARR_RXH_TH_DEACT 15
   static int arr_rxh[ARRAY_LEN] = { 0 };
   char payload[128];
   unsigned char *buffer;
@@ -192,17 +193,20 @@ PROCESS_THREAD(rpl_metric_timer_process, ev, data)
 #if (SINK_ADDITION >= 2)
       /* highest RX load on one of the neighbor */
       int arr_rxh_over = 0;
+      int arr_rxh_under = 0;
       if (default_instance != NULL) {
-        if (rxh_filled <= ARRAY_LEN) {
-          arr_rxh[filled-1] = get_rx_highest();
+	if ((count>1) && (rxh_filled < ARRAY_LEN)) {
+          arr_rxh[filled-1] = get_nbr_highest();
+	  rxh_filled++;
         }
-        if (rxh_filled > ARRAY_LEN) {
+        if (rxh_filled >= ARRAY_LEN) {
           for (i=0; i < ARRAY_LEN-1; i++) {
             arr_rxh[i] = arr_rxh[i+1];
           }
-          arr_rxh[ARRAY_LEN-1] = get_rx_highest();
+          arr_rxh[ARRAY_LEN-1] = get_nbr_highest();
 
           for (i=0; i < ARRAY_LEN; i++) { if (arr_rxh[i] >= ARR_RXH_TH) { arr_rxh_over++; } }
+          for (i=0; i < ARRAY_LEN; i++) { if (arr_rxh[i] <= ARR_RXH_TH_DEACT) { arr_rxh_under++; } }
         }
         printf("%d ARR_RXH: TH: %d A: %d %d %d %d %d OVER: %d\n", count, ARR_RXH_TH, arr_rxh[0], arr_rxh[1], arr_rxh[2], arr_rxh[3], arr_rxh[4], arr_rxh_over);
       }
@@ -221,7 +225,7 @@ PROCESS_THREAD(rpl_metric_timer_process, ev, data)
           memcpy(&payload[3], &default_instance->longest_hop, 1); 
 	  tmp16 = uip_htons(last_recv);
           memcpy(&payload[4], &tmp16, 2); 
-	  tmp16 = uip_htons((uint16_t)get_rx_highest());
+	  tmp16 = uip_htons((uint16_t)get_nbr_highest());
           memcpy(&payload[6], &tmp16, 2); 
 	  tmp32 = uip_htonl(default_instance->energy);
           memcpy(&payload[8], &tmp32, 4); 
@@ -247,7 +251,7 @@ PROCESS_THREAD(rpl_metric_timer_process, ev, data)
       if (default_instance != NULL) {
         /* we ignore the first counter since it tends to be over the threshold */
 	if ((filled >= ARRAY_LEN) && (arr_rx_over >= 3)) {
-	//if ((filled >= ARRAY_LEN) && (arr_rxh_over >= 3)) {
+	//if ((rxh_filled >= ARRAY_LEN) && (arr_rxh_over >= 3)) {
 	  /* find sink to activate */
           target_node = activate_sink();
 
@@ -271,6 +275,7 @@ PROCESS_THREAD(rpl_metric_timer_process, ev, data)
           }
         } else {
           if ((filled >= ARRAY_LEN) && (arr_rx_under >= 3)) {
+          //if ((rxh_filled >= ARRAY_LEN) && (arr_rxh_under >= 3)) {
           //if (default_instance->received_traffic < (SINK_METRIC_RX_TRAFFIC*SINK_METRIC_THRESHOLD)) {
 	    /* find sink to deactivate */
             target_node = deactivate_sink();
