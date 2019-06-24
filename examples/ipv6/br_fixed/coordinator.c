@@ -38,12 +38,14 @@ char *cmd = NULL;
 static int act = 0;
 
 /*---------------------------------------------------------------------------*/
-#define ARRAY_LEN 6
+#define ARRAY_LEN 5
 #define RX_TH_ACT 50
-#define RX_TH_DEACT 10
+#define RX_TH_DEACT 15
 #define NBR_TH_ACT 50
-#define NBR_TH_DEACT 10
-#define TH_NUM 3
+#define NBR_TH_DEACT 15
+#define THRESHOLD_HIT 3
+#define HOLDDOWN 1
+#define RX_METRIC 1
 typedef struct candidate_sink {
   struct candidate_sink *next;
   struct sockaddr_in6 node_addr; 
@@ -59,11 +61,16 @@ typedef struct candidate_sink {
   uint32_t slip_out;
 
   int last_arr_index;
+  uint16_t last_rx;
   uint16_t arr_rx[ARRAY_LEN];
   uint16_t arr_nbr[ARRAY_LEN];
   int rx_over;
+  int rx_over2;
+  int rx_over3;
   int rx_under;
   int nbr_over;
+  int nbr_over2;
+  int nbr_over3;
   int nbr_under;
   int holddown;
 
@@ -73,7 +80,7 @@ candidate_sink_t *sink_table = NULL, *last_node = NULL;
 candidate_sink_t *activate_list[MAX_ACT_LIST] = {NULL};
 candidate_sink_t *deactivate_sink = NULL;
 /*---------------------------------------------------------------------------*/
-static int require_num = 0, curr_num = 0;
+static int require_num = 0, curr_num = 0, ack_received = 0;
 #define MAX_TREE_SIZE 20
 #define MAX_LONGEST_HOP 7
 #define MAX_RX_TRAFFIC 2000
@@ -92,8 +99,8 @@ printf("SINK_LIST:\n");
     printf("R: %u N: %u S: %u H: %u ", current->rank, current->num_neighbor, current->tree_size, current->longest_hop);
     printf("SI: %u SO: %u E: %u ", current->slip_in, current->slip_out, current->energy);
     printf("I: %d HD: %d\n", current->last_arr_index, current->holddown);
-    printf("ARX: %u %u %u %u %u %u ", current->arr_rx[0], current->arr_rx[1], current->arr_rx[2], current->arr_rx[3], current->arr_rx[4], current->arr_rx[5]);
-    printf("ANB: %u %u %u %u %u %u\n", current->arr_nbr[0], current->arr_nbr[1], current->arr_nbr[2], current->arr_nbr[3], current->arr_nbr[4], current->arr_nbr[5]);
+    printf("ARX: %u %u %u %u %u ", current->arr_rx[0], current->arr_rx[1], current->arr_rx[2], current->arr_rx[3], current->arr_rx[4]);
+    printf("ANB: %u %u %u %u %u\n", current->arr_nbr[0], current->arr_nbr[1], current->arr_nbr[2], current->arr_nbr[3], current->arr_nbr[4]);
 
     current = current->next;
   }
@@ -114,32 +121,45 @@ int sink_selection_algorithm(candidate_sink_t *node){
   candidate_sink_t *current = sink_table;
   candidate_sink_t *hirank = NULL, *hinbr = NULL;
   int rx_over=0, rx_under=0;
+  int rx_over2=0, rx_over3=0;
   int nbr_over=0, nbr_under=0;
+  int nbr_over2=0, nbr_over3=0;
   int rank_over=0;
   //int skip=0;
   int sink_total=0, sink_activated=0, sink_fixed=0;
   uint32_t total_rx = 0, total_nbr = 0;
-  int available = 0;
+  int available = 0, unavailable = 0;
 
   /* update node */
   node->rx_over = 0;
+  node->rx_over2 = 0;
+  node->rx_over3 = 0;
   node->rx_under = 0;
   node->nbr_over = 0;
+  node->nbr_over2 = 0;
+  node->nbr_over3 = 0;
   node->nbr_under = 0;
 /*
-  for (int i=1; i<ARRAY_LEN; i++) {
-    if ((node->arr_rx[i]-node->arr_rx[0]) >= RX_TH_ACT) { node->rx_over++; }; 
-    if ((node->arr_rx[i]-node->arr_rx[0]) <= RX_TH_DEACT) { node->rx_under++; }; 
-    if ((node->arr_nbr[i]-node->arr_nbr[0]) >= NBR_TH_ACT) { node->nbr_over++; }; 
-    if ((node->arr_nbr[i]-node->arr_nbr[0]) <= NBR_TH_DEACT) { node->nbr_under++; }; 
+  for (int i=0; i<ARRAY_LEN; i++) {
+    if (node->arr_rx[i] >= RX_TH_ACT) { node->rx_over++; }; 
+    if (node->arr_rx[i] >= RX_TH_ACT*2) { node->rx_over2++; }; 
+    if (node->arr_rx[i] >= RX_TH_ACT*3) { node->rx_over3++; }; 
+    if (node->arr_rx[i] <= RX_TH_DEACT) { node->rx_under++; }; 
+    if (node->arr_nbr[i] >= NBR_TH_ACT) { node->nbr_over++; }; 
+    if (node->arr_nbr[i] >= NBR_TH_ACT*2) { node->nbr_over2++; }; 
+    if (node->arr_nbr[i] >= NBR_TH_ACT*3) { node->nbr_over3++; }; 
+    if (node->arr_nbr[i] <= NBR_TH_DEACT) { node->nbr_under++; }; 
   }
 */
-  for (int i=1; i<ARRAY_LEN; i++) {
-    if ((node->arr_rx[i]-node->arr_rx[i-1]) >= RX_TH_ACT) { node->rx_over++; }; 
-    if ((node->arr_rx[i]-node->arr_rx[i-1]) <= RX_TH_DEACT) { node->rx_under++; }; 
-    if ((node->arr_nbr[i]-node->arr_nbr[i-1]) >= NBR_TH_ACT) { node->nbr_over++; }; 
-    if ((node->arr_nbr[i]-node->arr_nbr[i-1]) <= NBR_TH_DEACT) { node->nbr_under++; }; 
-
+  for (int i=1; i<=THRESHOLD_HIT; i++) {
+    if (node->arr_rx[ARRAY_LEN-THRESHOLD_HIT] >= RX_TH_ACT) { node->rx_over++; }; 
+    if (node->arr_rx[ARRAY_LEN-THRESHOLD_HIT] >= RX_TH_ACT*2) { node->rx_over2++; }; 
+    if (node->arr_rx[ARRAY_LEN-THRESHOLD_HIT] >= RX_TH_ACT*3) { node->rx_over3++; }; 
+    if (node->arr_rx[ARRAY_LEN-THRESHOLD_HIT] <= RX_TH_DEACT) { node->rx_under++; }; 
+    if (node->arr_nbr[ARRAY_LEN-THRESHOLD_HIT] >= NBR_TH_ACT) { node->nbr_over++; }; 
+    if (node->arr_nbr[ARRAY_LEN-THRESHOLD_HIT] >= NBR_TH_ACT*2) { node->nbr_over2++; }; 
+    if (node->arr_nbr[ARRAY_LEN-THRESHOLD_HIT] >= NBR_TH_ACT*3) { node->nbr_over3++; }; 
+    if (node->arr_nbr[ARRAY_LEN-THRESHOLD_HIT] <= NBR_TH_DEACT) { node->nbr_under++; }; 
   }
 
   /* Don't run algorithm if node is under holddown period */
@@ -150,16 +170,24 @@ int sink_selection_algorithm(candidate_sink_t *node){
     if (current->activated>0) {
       total_rx += current->arr_rx[current->last_arr_index-1];
       total_nbr += current->arr_nbr[current->last_arr_index-1];
-      if ((current->rx_over >= TH_NUM)&&(current->holddown==0)) rx_over++;
-      if ((current->rx_under >= TH_NUM)&&(current->holddown==0)) rx_under++;
-      if ((current->nbr_over >= TH_NUM)&&(current->holddown==0)) nbr_over++;
-      if ((current->nbr_under >= TH_NUM)&&(current->holddown==0)) nbr_under++;
+      if ((current->rx_over >= THRESHOLD_HIT)&&(current->holddown==0)) rx_over++;
+      if ((current->rx_over2 >= THRESHOLD_HIT)&&(current->holddown==0)) rx_over2++;
+      if ((current->rx_over3 >= THRESHOLD_HIT)&&(current->holddown==0)) rx_over3++;
+      if ((current->rx_under >= THRESHOLD_HIT)&&(current->holddown==0)) rx_under++;
+      if ((current->nbr_over >= THRESHOLD_HIT)&&(current->holddown==0)) nbr_over++;
+      if ((current->nbr_over2 >= THRESHOLD_HIT)&&(current->holddown==0)) nbr_over2++;
+      if ((current->nbr_over3 >= THRESHOLD_HIT)&&(current->holddown==0)) nbr_over3++;
+      if ((current->nbr_under >= THRESHOLD_HIT)&&(current->holddown==0)) nbr_under++;
       sink_activated++;
       if (current->activated>1) sink_fixed++;
     } else {
       //if (current->rank >= MAX_RANK) rank_over++;
-      activate_list[available] = current;
-      available++;
+      if (current->holddown==0) {
+        activate_list[available] = current;
+        available++;
+      } else {
+	unavailable++;
+      }
     }
     sink_total++;
     current = current->next;
@@ -171,6 +199,7 @@ int sink_selection_algorithm(candidate_sink_t *node){
   }
     
   /* sort available sinks with the highest rank first */
+/*
     candidate_sink_t *temp = NULL;
     for (int i=0; i<available-1; i++) {
       for (int j=0; j < available-i-1; j++) {
@@ -180,9 +209,9 @@ int sink_selection_algorithm(candidate_sink_t *node){
           activate_list[j] = activate_list[j+1];
           activate_list[j+1] = temp;
         }
-      } /* sort j */
-    } /* sort i */
-
+      } // sort j
+    } // sort i 
+*/
 print_sink_list(sink_table);
   char tmp_addr_str[INET6_ADDRSTRLEN];
   for (int i=0; i<MAX_ACT_LIST; i++) {
@@ -195,31 +224,56 @@ print_sink_list(sink_table);
       printf("%d: NULL\n", i+1);
     }
   }
-  printf("rank_over:%d rx_over:%d rx_under:%d total:%d act:%d fix:%d avail:%d\n", rank_over, rx_over, rx_under, sink_total, sink_activated, sink_fixed, available);
+  printf("ranko:%d rxo:%d 2:%d 3:%d rxu:%d nbro:%d 2:%d 3:%d nbru:%d total:%d act:%d fix:%d avail:%d\n", rank_over, rx_over, rx_over2, rx_over3, rx_under, nbr_over, nbr_over2, nbr_over3, nbr_under, sink_total, sink_activated, sink_fixed, available);
 
   /* if we have an unactive sink, we activate it if needed */
-  //if (rank_over>0) return rank_over;
-  if ((rx_over>0) && (available>0)) {
-    node->holddown = 3; 
-    return 1;
+  if (RX_METRIC) {
+    if ((rx_over>0) && (available>0)) {
+      node->holddown = HOLDDOWN; 
+      return 1;
+    }
+  } else {
+    if ((nbr_over>0) && (available>0)) {
+      node->holddown = HOLDDOWN;
+      return 1;
+    }
   }
 
   /* If there are more than one sink underutilize, we deactivate one */
-  if ((sink_activated>sink_fixed) && (rx_under>1)) {
-    /* select one with the lowest traffic */
-    current = sink_table;
-    while (current != NULL) {
-      if (current->activated==1) {
-	if (deactivate_sink == NULL) { 
-          deactivate_sink = current;
-        } else if (current->arr_rx[current->last_arr_index-1] < deactivate_sink->arr_rx[deactivate_sink->last_arr_index-1]) {
-          deactivate_sink = current;
-        }
-      } 
-      current = current->next;
+  if (RX_METRIC) {
+    if ((sink_activated>sink_fixed) && (rx_under>1)) {
+      /* select one with the lowest traffic */
+      current = sink_table;
+      while (current != NULL) {
+        if (current->activated==1) {
+  	if (deactivate_sink == NULL) { 
+            deactivate_sink = current;
+          } else if (current->arr_rx[current->last_arr_index-1] < deactivate_sink->arr_rx[deactivate_sink->last_arr_index-1]) {
+            deactivate_sink = current;
+          }
+        } 
+        current = current->next;
+      }
+      node->holddown = HOLDDOWN; 
+      return -1;
     }
-    node->holddown = 3; 
-    return -1;
+  } else {
+    if ((sink_activated>sink_fixed) && (nbr_under>1)) {
+      /* select one with the lowest traffic */
+      current = sink_table;
+      while (current != NULL) {
+        if (current->activated==1) {
+        if (deactivate_sink == NULL) { 
+            deactivate_sink = current;
+          } else if (current->arr_nbr[current->last_arr_index-1] < deactivate_sink->arr_nbr[deactivate_sink->last_arr_index-1]) {
+            deactivate_sink = current;
+          } 
+        } 
+        current = current->next;
+      } 
+      node->holddown = HOLDDOWN;
+      return -1;
+    }
   }
   return 0;
 }
@@ -470,7 +524,7 @@ printf(" rank: %u nbr: %u\n", node->rank, node->num_neighbor);
             if (node != NULL) {
               if (node->activated == 0) {
                 node->activated = 1;
-                node->holddown = 5;
+                node->holddown = HOLDDOWN; //5;
                 act++;
                 if (require_num <= act) {
                   require_num = 0;
@@ -508,7 +562,7 @@ printf(" rank: %u nbr: %u\n", node->rank, node->num_neighbor);
             if (node != NULL) {
               if (node->activated > 0) {
                 node->activated = 0;
-                node->holddown = 5;
+                node->holddown = HOLDDOWN; //5;
                 node->rank = 0;
                 //if (require_num < 0) { require_num++; deactivate_sink = NULL; }
 		require_num = 0;
@@ -567,16 +621,18 @@ printf("REPORT: %s ", inet_ntop(AF_INET6, &tmp_addr.sin6_addr, tmp_addr_str, INE
 
 printf("tree: %u hop: %u rx: %u nbr: %u enr: %u sin: %u sout: %u\n", node->tree_size, node->longest_hop, tmp_rx, tmp_nbr, node->energy, node->slip_in, node->slip_out);
 	    if (node->last_arr_index < ARRAY_LEN) {
-	      node->arr_rx[node->last_arr_index] = tmp_rx;
+	      node->arr_rx[node->last_arr_index] = (tmp_rx - node->last_rx);
 	      node->arr_nbr[node->last_arr_index] = tmp_nbr;
 	      node->last_arr_index++;
 	    } else {
 	      for (int i=1; i<ARRAY_LEN; i++) {
 		node->arr_rx[i-1] = node->arr_rx[i];
+		node->arr_nbr[i-1] = node->arr_nbr[i];
 	      }
-	      node->arr_rx[ARRAY_LEN-1] = tmp_rx;
+	      node->arr_rx[ARRAY_LEN-1] = (tmp_rx - node->last_rx);
 	      node->arr_nbr[ARRAY_LEN-1] = tmp_nbr;
 	    }
+	    node->last_rx = tmp_rx;
 		  
             if (periodic_print) {
               printf("CTR:%d\n", ctr);
@@ -592,6 +648,7 @@ printf("tree: %u hop: %u rx: %u nbr: %u enr: %u sin: %u sout: %u\n", node->tree_
             if ((require_num == 0) && (act == 0) && (node->last_arr_index >= ARRAY_LEN)) {
               require_num = sink_selection_algorithm(node);
               curr_num = 0;
+	      ack_received = 0;
 	      if (debug) printf("require_num: %d\n", require_num);
             }
 
@@ -602,13 +659,13 @@ printf("tree: %u hop: %u rx: %u nbr: %u enr: %u sin: %u sout: %u\n", node->tree_
 
           if (require_num > 0) {
 activate_now:
-            while (require_num > curr_num) {
+            while ((require_num > act) && (!ack_received)) {
               //struct timeval timeout = {5, 0};
               //fd_set read_set;
 
 	      if (activate_list[curr_num] != NULL) {
                 memcpy(&sink_addr,&activate_list[curr_num]->node_addr, sizeof(sink_addr));
-		curr_num++;
+	        curr_num++;
 
                 reply[0]=0x9b;
                 reply[1]=0x00;
@@ -659,11 +716,12 @@ printf("SEND ACTIVATION: %s\n", inet_ntop(AF_INET6, &sink_addr.sin6_addr, tmp_ad
                   printf("No reply, fail to activate %s\n", inet_ntop(AF_INET6, &sink_addr.sin6_addr, sink_addr_str, INET6_ADDRSTRLEN));
                   // mark sink unreachable
                 } else if (msg_len < 0) {
-                    perror("Select");
+                  perror("Select");
                 } else {
-                    /* we get response from activated sink */
-                    if (debug) printf("RECEIVE ACTIVATION ACK\n");
-                    //require_num--;
+                  /* we get response from activated sink */
+		  ack_received = 1;
+                  if (debug) printf("RECEIVE ACTIVATION ACK\n");
+                  //require_num--;
                 }
               } else { /* if (activate_list[curr_num] != NULL) */
                 if (debug) printf("not enough candidate sink available\n");
