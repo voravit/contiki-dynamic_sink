@@ -31,13 +31,16 @@
 #ifndef PROJECT_ROUTER_CONF_H_
 #define PROJECT_ROUTER_CONF_H_
 
+#undef WITH_NON_STORING
+#define WITH_NON_STORING 1
+
 #ifndef WITH_NON_STORING
 #define WITH_NON_STORING 0 /* Set this to run with non-storing mode */
 #endif /* WITH_NON_STORING */
 
 #if WITH_NON_STORING
 #undef RPL_NS_CONF_LINK_NUM
-#define RPL_NS_CONF_LINK_NUM 40 /* Number of links maintained at the root */
+#define RPL_NS_CONF_LINK_NUM 100 /* Number of links maintained at the root */
 #undef UIP_CONF_MAX_ROUTES
 #define UIP_CONF_MAX_ROUTES 0 /* No need for routes */
 #undef RPL_CONF_MOP
@@ -86,6 +89,7 @@
 #define RPL_CONF_COORDINATOR_IP_ADDR "FD00::2"
 #define RPL_CONF_VIRTUAL_ROOT_IP_ADDR "FD00::10"
 #define SINK_ADDITION 1
+#define UIP_CONF_STATISTICS 1
 #define SINK_FIXED 1
 
 #define RPL_CONF_STATS 1

@@ -87,7 +87,7 @@
 #endif /* WITH_NON_STORING */
 
 //#define CSMA_CONF_MAX_FRAME_RETRIES 3
-#define RATE 2
+#define RATE 10
 #define TOTAL_SEND (10 + (10*RATE) + 10)
 #define SERVER_REPLY 1
 #define RPL_CONF_STATS 1
@@ -95,6 +95,7 @@
 //#define RPL_CONF_MAX_DAG_PER_INSTANCE 4
 #define UIP_CONF_STATISTICS 1
 #define SENSOR_PRINT 1
+//#define RPL_CONF_WITH_DAO_ACK 1
 
 /* OF0 based metric */
 #if 0

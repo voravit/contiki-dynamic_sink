@@ -95,6 +95,7 @@
 //#define RPL_CONF_MAX_DAG_PER_INSTANCE 4
 #define UIP_CONF_STATISTICS 1
 #define SENSOR_PRINT 1
+//#define RPL_CONF_WITH_DAO_ACK 1
 
 /* OF0 based metric */
 #if 0

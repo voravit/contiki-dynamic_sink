@@ -90,9 +90,10 @@
 #define RPL_CONF_VIRTUAL_ROOT_IP_ADDR "FD00::10"
 #define SINK_ADDITION 1
 #define UIP_CONF_STATISTICS 1
+//#define RPL_CONF_WITH_DAO_ACK 1
 
 #define RPL_CONF_STATS 1
-#define RATE 2
+#define RATE 10
 #define TOTAL_SEND (10 + (10*RATE) + 10)
 
 #endif /* PROJECT_ROUTER_CONF_H_ */

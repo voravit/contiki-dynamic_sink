@@ -311,10 +311,13 @@ PROCESS_THREAD(sender_process, ev, data)
   set_global_address();
 
 //  print_local_addresses();
-/*
+
 PRINTF("nbr:%d routes:%d queuebuf:%d\n", NBR_TABLE_MAX_NEIGHBORS, UIP_CONF_MAX_ROUTES, QUEUEBUF_CONF_NUM);
+/*
 printf("Ticks per second: %u\n", RTIMER_SECOND);
 printf("clock_time_t size:%d\n", sizeof(clock_time_t));
+printf("uip_stats_t:%u\n", sizeof(uip_stats_t));
+printf("unsigned short:%u\n", sizeof(unsigned short));
 printf("unsigned long:%d\n", sizeof(unsigned long));
 printf("unsigned long long:%d\n", sizeof(unsigned long long));
 printf("uint32_t:%d\n", sizeof(uint32_t));
@@ -322,7 +325,8 @@ printf("int:%d\n", sizeof(int));
 */
 
 #if SENSOR_PRINT
-start_rpl_parent_queue();
+  start_rpl_metric_timer();
+  start_rpl_parent_queue();
 #endif
 
 /* wait 2 min for RPL topology to form */
@@ -355,7 +359,7 @@ etimer_set(&periodic, SEND_INTERVAL_60S);
       if (ctr<=10) { // send rate 1 pkt/60s
 	ctimer_set(&backoff_timer, SEND_TIME_60S, send_packet, NULL);
         etimer_reset(&periodic);
-if ((ctr == 3)||(ctr == 8)) {
+//if ((ctr == 3)||(ctr == 8)) {
 printf("MARK %d BEGIN\n",ctr);
   show_routes();
   show_uip_stats();
@@ -367,11 +371,15 @@ if (default_instance != NULL) {
 #endif
 #if SINK_ADDITION || SENSOR_PRINT
 if (default_instance != NULL) {
-  printf("RANK: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d\n", default_instance->current_dag->rank, default_instance->received_traffic, default_instance->highest_traffic, default_instance->energy, rpl_parent_queue_len());
+  if (default_instance->current_dag->preferred_parent != NULL) {
+    printf("SIZE: - DEPTH: - RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: %02x ETX: %u\n", get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
+  } else {
+    printf("SIZE: - DEPTH: - RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: 00 ETX: 000\n", get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank);
+  }
 }
 #endif
 printf("MARK %d END\n",ctr);
-}
+//}
       } else if (ctr<=(10+(10*RATE))) { // send rate 1 pkt/30s
 	ctimer_set(&backoff_timer, SEND_TIME_VARY, send_packet, NULL);
         if (ctr==11) {
@@ -379,7 +387,9 @@ printf("MARK %d END\n",ctr);
 printf("RATE INCREASE %lu\n",SEND_INTERVAL_VARY);
         } else {
           etimer_reset(&periodic);
-if ((ctr == (10+(2*RATE)+1)) || (ctr == (10+(7*RATE)+1))) {
+        }
+//if ((ctr == (10+(2*RATE)+1)) || (ctr == (10+(7*RATE)+1))) {
+if (((ctr-10)%RATE) == 1) {
 printf("MARK %d BEGIN\n",ctr);
   show_routes();
   show_uip_stats();
@@ -391,12 +401,15 @@ if (default_instance != NULL) {
 #endif
 #if SINK_ADDITION || SENSOR_PRINT
 if (default_instance != NULL) {
-  printf("RANK: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d\n", default_instance->current_dag->rank, default_instance->received_traffic, default_instance->highest_traffic, default_instance->energy, rpl_parent_queue_len());
+  if (default_instance->current_dag->preferred_parent != NULL) {
+    printf("SIZE: - DEPTH: - RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: %02x ETX: %u\n", get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
+  } else {
+    printf("SIZE: - DEPTH: - RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: 00 ETX: 000\n", get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank);
+  }
 }
 #endif
 printf("MARK %d END\n",ctr);
 }
-        }
       } else if (ctr<=TOTAL_SEND) { // send rate 1 pkt/60s
 	ctimer_set(&backoff_timer, SEND_TIME_60S, send_packet, NULL);
         if (ctr==(10+(10*RATE)+1)) {
@@ -404,7 +417,8 @@ printf("MARK %d END\n",ctr);
 printf("RATE DECREASE %lu\n",SEND_INTERVAL_60S);
         } else {
           etimer_reset(&periodic);
-if ((ctr == (10+(10*RATE)+3))||(ctr == (10+(10*RATE)+8))) {
+        }
+//if ((ctr == (10+(10*RATE)+3))||(ctr == (10+(10*RATE)+8))) {
 printf("MARK %d BEGIN\n",ctr);
   show_routes();
   show_uip_stats();
@@ -416,20 +430,70 @@ if (default_instance != NULL) {
 #endif
 #if SINK_ADDITION || SENSOR_PRINT
 if (default_instance != NULL) {
-  printf("RANK: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d\n", default_instance->current_dag->rank, default_instance->received_traffic, default_instance->highest_traffic, default_instance->energy, rpl_parent_queue_len());
+  if (default_instance->current_dag->preferred_parent != NULL) {
+    printf("SIZE: - DEPTH: - RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: %02x ETX: %u\n", get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
+  } else {
+    printf("SIZE: - DEPTH: - RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: 00 ETX: 000\n", get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank);
+  }
 }
 #endif
 printf("MARK %d END\n",ctr);
-}
-        }
+//}
       } else {
         if (not_done) {
           not_done--;
           etimer_reset(&periodic);
+printf("MARK %d BEGIN\n",ctr);
+  show_routes();
+  show_uip_stats();
+  print_link_stats();
+#if SINK_ADDITION
+if (default_instance != NULL) {
+  printf("TOPO: %u %u\n", default_instance->tree_size, default_instance->longest_hop);
+}
+#endif
+#if SINK_ADDITION || SENSOR_PRINT
+if (default_instance != NULL) {
+  if (default_instance->current_dag->preferred_parent != NULL) {
+    printf("SIZE: - DEPTH: - RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: %02x ETX: %u\n", get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
+  } else {
+    printf("SIZE: - DEPTH: - RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: 00 ETX: 000\n", get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank);
+  }
+}
+#endif
+printf("MARK %d END\n",ctr);
         }
       }
     } /* etimer_expired(&periodic) */
   } /* end while */
+
+/* wait 3 more minutes. under heavy load we have long delay before the node finish sending */
+while(ctr<=(TOTAL_SEND + 3)) {
+  PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic));
+  if (etimer_expired(&periodic)) {
+    ctr++;
+    printf("MARK %d BEGIN\n",ctr);
+    show_routes();
+    show_uip_stats();
+    print_link_stats();
+    #if SINK_ADDITION
+    if (default_instance != NULL) {
+      printf("TOPO: %u %u\n", default_instance->tree_size, default_instance->longest_hop);
+    }
+    #endif
+    #if SINK_ADDITION || SENSOR_PRINT
+    if (default_instance != NULL) {
+  if (default_instance->current_dag->preferred_parent != NULL) {
+    printf("SIZE: - DEPTH: - RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: %02x ETX: %u\n", get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
+  } else {
+    printf("SIZE: - DEPTH: - RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: 00 ETX: 000\n", get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank);
+  }
+    }
+    #endif
+    printf("MARK %d END\n",ctr);
+    etimer_reset(&periodic);
+  }
+}
 
 /* wait 10s before printing out */
 etimer_set(&periodic, 10*CLOCK_SECOND);

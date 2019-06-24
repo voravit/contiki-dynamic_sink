@@ -574,7 +574,8 @@ show_routes(void)
   uip_ds6_route_t *r;
   uip_ipaddr_t *ipaddr;
   if((ipaddr = uip_ds6_defrt_choose()) != NULL) {
-    printf("defrt:%02x%02x\n", ipaddr->u8[14], ipaddr->u8[15]);
+//    printf("defrt:%02x%02x\n", ipaddr->u8[14], ipaddr->u8[15]);
+    printf("defrt:%02x\n", ipaddr->u8[15]);
   } else {
     printf("defrt: NULL\n");
   }
@@ -582,16 +583,26 @@ show_routes(void)
   if (r != NULL)
   {
     for(r = uip_ds6_route_head(); r != NULL; r = uip_ds6_route_next(r)) {
-        printf("dst:%02x%02x via:%02x%02x valid:%lu\n",
-          r->ipaddr.u8[14],
+//        printf("dst:%02x%02x via:%02x%02x valid:%lu\n",
+        printf("dst:%02x via:%02x valid:%lu\n",
+//          r->ipaddr.u8[14],
           r->ipaddr.u8[15],
-          uip_ds6_route_nexthop(r)->u8[14],
+//          uip_ds6_route_nexthop(r)->u8[14],
           uip_ds6_route_nexthop(r)->u8[15],
           r->state.lifetime
         );
     }
   }
 }
+/*---------------------------------------------------------------------------*/
+#if UIP_CONF_STATISTICS
+static void
+show_uip_stats(void)
+{
+  printf("UIP STATS: %u %u %u %u\n",
+        uip_stat.ip.recv, uip_stat.ip.sent, uip_stat.ip.forwarded, uip_stat.ip.drop);
+}
+#endif
 /*---------------------------------------------------------------------------*/
 #if RPL_CONF_STATS
 static void
@@ -675,7 +686,12 @@ PROCESS_THREAD(border_router_process, ev, data)
   print_local_addresses();
 #endif
 
+#if (SINK_ADDITION >= 1)
   start_rpl_metric_timer();
+#endif
+#if SINK_ADDITION
+start_rpl_parent_queue();
+#endif
 
 etimer_set(&periodic, (120*CLOCK_SECOND));
 PROCESS_YIELD();
@@ -705,6 +721,25 @@ if(etimer_expired(&periodic)) {
       if (ctr<=10) { // send rate 1 pkt/60s
         ctimer_set(&backoff_timer, SEND_TIME_60S, send_packet, NULL);
         etimer_reset(&periodic);
+printf("MARK %d BEGIN\n",ctr);
+  show_routes();
+  show_uip_stats();
+  print_link_stats();
+#if SINK_ADDITION
+if (default_instance != NULL) {
+  printf("TOPO: %u %u\n", default_instance->tree_size, default_instance->longest_hop);
+}
+#endif
+#if SINK_ADDITION || SENSOR_PRINT
+if (default_instance != NULL) {
+  if (default_instance->current_dag->preferred_parent != NULL) {
+    printf("SIZE: %u DEPTH: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: %02x ETX: %u\n", default_instance->tree_size, default_instance->longest_hop, get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
+  } else {
+    printf("SIZE: %u DEPTH: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: 00 ETX: 000\n", default_instance->tree_size, default_instance->longest_hop, get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank);
+  }
+}
+#endif
+printf("MARK %d END\n",ctr);
       } else if (ctr<=(10+(10*RATE))) { // send rate 1 pkt/30s
         ctimer_set(&backoff_timer, SEND_TIME_VARY, send_packet, NULL);
         if (ctr==11) {
@@ -712,6 +747,27 @@ if(etimer_expired(&periodic)) {
         } else {
           etimer_reset(&periodic);
         }
+if (((ctr-10)%RATE) == 1) {
+printf("MARK %d BEGIN\n",ctr);
+  show_routes();
+  show_uip_stats();
+  print_link_stats();
+#if SINK_ADDITION
+if (default_instance != NULL) {
+  printf("TOPO: %u %u\n", default_instance->tree_size, default_instance->longest_hop);
+}
+#endif
+#if SINK_ADDITION || SENSOR_PRINT
+if (default_instance != NULL) {
+  if (default_instance->current_dag->preferred_parent != NULL) {
+    printf("SIZE: %u DEPTH: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: %02x ETX: %u\n", default_instance->tree_size, default_instance->longest_hop, get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
+  } else {
+    printf("SIZE: %u DEPTH: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: 00 ETX: 000\n", default_instance->tree_size, default_instance->longest_hop, get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank);
+  }
+}
+#endif
+printf("MARK %d END\n",ctr);
+}
       } else if (ctr<=TOTAL_SEND) { // send rate 1 pkt/60s
         ctimer_set(&backoff_timer, SEND_TIME_60S, send_packet, NULL);
         if (ctr==(10+(10*RATE)+1)) {
@@ -719,14 +775,80 @@ if(etimer_expired(&periodic)) {
         } else {
           etimer_reset(&periodic);
         }
+printf("MARK %d BEGIN\n",ctr);
+  show_routes();
+  show_uip_stats();
+  print_link_stats();
+#if SINK_ADDITION
+if (default_instance != NULL) {
+  printf("TOPO: %u %u\n", default_instance->tree_size, default_instance->longest_hop);
+}
+#endif
+#if SINK_ADDITION || SENSOR_PRINT
+if (default_instance != NULL) {
+  if (default_instance->current_dag->preferred_parent != NULL) {
+    printf("SIZE: %u DEPTH: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: %02x ETX: %u\n", default_instance->tree_size, default_instance->longest_hop, get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
+  } else {
+    printf("SIZE: %u DEPTH: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: 00 ETX: 000\n", default_instance->tree_size, default_instance->longest_hop, get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank);
+  }
+}
+#endif
+printf("MARK %d END\n",ctr);
       } else {
         if (not_done) {
           not_done--;
           etimer_reset(&periodic);
+printf("MARK %d BEGIN\n",ctr);
+  show_routes();
+  show_uip_stats();
+  print_link_stats();
+#if SINK_ADDITION
+if (default_instance != NULL) {
+  printf("TOPO: %u %u\n", default_instance->tree_size, default_instance->longest_hop);
+}
+#endif
+#if SINK_ADDITION || SENSOR_PRINT
+if (default_instance != NULL) {
+  if (default_instance->current_dag->preferred_parent != NULL) {
+    printf("SIZE: %u DEPTH: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: %02x ETX: %u\n", default_instance->tree_size, default_instance->longest_hop, get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
+  } else {
+    printf("SIZE: %u DEPTH: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: 00 ETX: 000\n", default_instance->tree_size, default_instance->longest_hop, get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank);
+  }
+}
+#endif
+printf("MARK %d END\n",ctr);
         }
       }
     } /* etimer_expired(&periodic) */
   } /* while(not_done) */
+
+/* wait 3 more minutes */
+while(ctr<=(TOTAL_SEND + 3)) {
+  PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic));
+  if (etimer_expired(&periodic)) {
+    ctr++;
+    printf("MARK %d BEGIN\n",ctr);
+    show_routes();
+    show_uip_stats();
+    print_link_stats();
+    #if SINK_ADDITION
+    if (default_instance != NULL) {
+      printf("TOPO: %u %u\n", default_instance->tree_size, default_instance->longest_hop);
+    }
+    #endif
+    #if SINK_ADDITION || SENSOR_PRINT
+    if (default_instance != NULL) {
+      if (default_instance->current_dag->preferred_parent != NULL) {
+        printf("SIZE: %u DEPTH: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: %02x ETX: %u\n", default_instance->tree_size, default_instance->longest_hop, get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank, rpl_get_parent_ipaddr(default_instance->current_dag->preferred_parent)->u8[15], rpl_get_parent_link_stats(default_instance->current_dag->preferred_parent)->etx);
+      } else {
+        printf("SIZE: %u DEPTH: %u RX: %lu NBR: %lu ENR: %lu QLEN: %d RANK: %u PRN: 00 ETX: 000\n", default_instance->tree_size, default_instance->longest_hop, get_rx(), get_nbr_highest(), default_instance->energy, rpl_parent_queue_len(), default_instance->current_dag->rank);
+      }
+    }
+    #endif
+    printf("MARK %d END\n",ctr);
+    etimer_reset(&periodic);
+  }
+}
 
 /* wait 10s before printing out */
 etimer_set(&periodic, 10*CLOCK_SECOND);
@@ -739,6 +861,11 @@ PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic));
 
 #if WITH_COMPOWER
   powertrace_stop();
+#endif
+
+#if SINK_ADDITION
+stop_rpl_parent_queue();
+stop_rpl_metric_timer();
 #endif
 
 #if SINK_ADDITION

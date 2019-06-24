@@ -90,6 +90,7 @@
 #define SINK_ADDITION 1
 #define SINK_FIXED 1
 #define UIP_CONF_STATISTICS 1
+//#define RPL_CONF_WITH_DAO_ACK 1
 
 #define RPL_CONF_STATS 1
 #define CONF_TOTAL_SEND 30

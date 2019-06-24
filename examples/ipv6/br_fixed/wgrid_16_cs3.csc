@@ -526,7 +526,7 @@ make border-router.wismote TARGET=wismote WITH_COMPOWER=1</commands>
     <plugin_config>
       <script>try { load("nashorn:mozilla_compat.js"); } catch(e) {}
 
-TIMEOUT(2000000);
+TIMEOUT(2200000);
 
  //import Java Package to JavaScript
  importPackage(java.io);
