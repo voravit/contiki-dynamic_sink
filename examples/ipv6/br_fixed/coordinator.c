@@ -35,7 +35,7 @@ int file_fd;
 char *server = SERVADDR;
 int debug = 0, daemonized = 1;
 char *cmd = NULL;
-static int act = 0;
+//static int act = 0;
 
 /*---------------------------------------------------------------------------*/
 #define ARRAY_LEN 5
@@ -187,6 +187,7 @@ int sink_selection_algorithm(candidate_sink_t *node){
         available++;
       } else {
 	unavailable++;
+	current->holddown--;
       }
     }
     sink_total++;
@@ -525,15 +526,11 @@ printf(" rank: %u nbr: %u\n", node->rank, node->num_neighbor);
               if (node->activated == 0) {
                 node->activated = 1;
                 node->holddown = HOLDDOWN; //5;
-                act++;
-                if (require_num <= act) {
                   require_num = 0;
-                  act = 0;
                   activate_list[0] = NULL;
                   activate_list[1] = NULL;
                   activate_list[2] = NULL;
                   activate_list[3] = NULL;
-                }
               } else {
                 printf("Already activated\n");
               }
@@ -645,7 +642,8 @@ printf("tree: %u hop: %u rx: %u nbr: %u enr: %u sin: %u sout: %u\n", node->tree_
              * we may activate more than 1 sink but deactivate only one sink at a time 
              * algorithm return 0: no action, N: activate N sink, and -1: deactivate 1 sink
              */
-            if ((require_num == 0) && (act == 0) && (node->last_arr_index >= ARRAY_LEN)) {
+            //if ((require_num == 0) && (node->last_arr_index >= ARRAY_LEN)) {
+            if (node->last_arr_index >= ARRAY_LEN) {
               require_num = sink_selection_algorithm(node);
               curr_num = 0;
 	      ack_received = 0;
@@ -659,7 +657,7 @@ printf("tree: %u hop: %u rx: %u nbr: %u enr: %u sin: %u sout: %u\n", node->tree_
 
           if (require_num > 0) {
 activate_now:
-            while ((require_num > act) && (!ack_received)) {
+            while ((require_num > 0) && (!ack_received)) {
               //struct timeval timeout = {5, 0};
               //fd_set read_set;
 

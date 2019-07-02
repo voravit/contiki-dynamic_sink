@@ -48,10 +48,12 @@
 
 #define DEBUG DEBUG_PRINT
 #include "net/ip/uip-debug.h"
+#include "net/rpl/rpl.h"
 
 void set_prefix_64(uip_ipaddr_t *);
 
 static uip_ipaddr_t last_sender;
+static uip_ipaddr_t udp_server, coordinator;
 /*---------------------------------------------------------------------------*/
 static void
 slip_input_callback(void)
@@ -98,12 +100,18 @@ init(void)
   slip_arch_init(BAUD2UBR(115200));
   process_start(&slip_process, NULL);
   slip_set_input_callback(slip_input_callback);
+
+  uip_ip6addr(&udp_server, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 0x0001);
+  uip_ip6addr(&coordinator, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 0x0002);
 }
 /*---------------------------------------------------------------------------*/
 static int
 output(void)
 {
-  if(uip_ipaddr_cmp(&last_sender, &UIP_IP_BUF->srcipaddr)) {
+  if((uip_ipaddr_cmp(&last_sender, &UIP_IP_BUF->srcipaddr)) && 
+     (!uip_ipaddr_cmp(&udp_server, &UIP_IP_BUF->destipaddr)) && 
+     (!uip_ipaddr_cmp(&coordinator, &UIP_IP_BUF->srcipaddr)) &&
+     (!uip_ipaddr_cmp(rpl_get_src_addr(), &UIP_IP_BUF->srcipaddr))) {
     /* Do not bounce packets back over SLIP if the packet was received
        over SLIP */
     PRINTF("slip-bridge: Destination off-link but no route src=");
