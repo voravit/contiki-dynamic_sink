@@ -1,0 +1,13 @@
+  <plugin>
+    org.contikios.cooja.serialsocket.SerialSocketServer
+    <mote_arg>0</mote_arg>
+    <plugin_config>
+      <port>60001</port>
+      <bound>false</bound>
+    </plugin_config>
+    <width>362</width>
+    <z>0</z>
+    <height>116</height>
+    <location_x>500</location_x>
+    <location_y>500</location_y>
+  </plugin>

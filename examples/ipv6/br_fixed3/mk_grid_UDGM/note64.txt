@@ -1,0 +1,5 @@
+170 315		5 dynamic sink	
+315 600		2 cbr
+600 1140	3 poisson
+1140 $		4 vary
+
