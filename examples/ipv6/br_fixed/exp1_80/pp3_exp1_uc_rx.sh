@@ -1,0 +1,30 @@
+#!/bin/bash
+if [ -z "$1" ]; then
+        V=30
+else
+        V=$1
+fi
+if [ -z "$2" ]; then
+        T=3
+else
+        T=$2
+fi
+
+#echo "./lp_exp1_uc_rx.sh 123456"
+#/home/voravit/repo/current/main/contiki/examples/ipv6/br_fixed/lp_exp1_uc_rx.sh 123456 $V $T
+
+echo "./lp_exp1_uc_rx.sh 1100000"
+/home/voravit/repo/current/main/contiki/examples/ipv6/br_fixed/lp_exp1_uc_rx.sh 1100000 $V $T
+
+echo "./lp_exp1_uc_rx.sh 1200000"
+/home/voravit/repo/current/main/contiki/examples/ipv6/br_fixed/lp_exp1_uc_rx.sh 1200000 $V $T
+
+echo "./lp_exp1_uc_rx.sh 1300000"
+/home/voravit/repo/current/main/contiki/examples/ipv6/br_fixed/lp_exp1_uc_rx.sh 1300000 $V $T
+
+echo "./lp_exp1_uc_rx.sh 1400000"
+/home/voravit/repo/current/main/contiki/examples/ipv6/br_fixed/lp_exp1_uc_rx.sh 1400000 $V $T
+
+echo "./lp_exp1_uc_rx.sh 1500000"
+/home/voravit/repo/current/main/contiki/examples/ipv6/br_fixed/lp_exp1_uc_rx.sh 1500000 $V $T
+
