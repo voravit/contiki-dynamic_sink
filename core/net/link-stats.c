@@ -81,6 +81,14 @@ struct ctimer periodic_timer;
 #define LINK_STATS_INIT_ETX(stats) (ETX_INIT * ETX_DIVISOR)
 #endif /* LINK_STATS_INIT_ETX */
 
+static uint32_t tx_unique;
+static uint32_t tx_all;
+#if SINK_ADDITION || SENSOR_PRINT
+static uint32_t rx_sum;
+static uint32_t rx_highest;
+static uint32_t rx_ctr;
+static uint32_t nbr_highest_ctr;
+#endif
 /*---------------------------------------------------------------------------*/
 /* Returns the neighbor's link stats */
 const struct link_stats *
@@ -135,11 +143,6 @@ link_stats_packet_sent(const linkaddr_t *lladdr, int status, int numtx)
   uint16_t packet_etx;
   uint8_t ewma_alpha;
 
-  if(status != MAC_TX_OK && status != MAC_TX_NOACK) {
-    /* Do not penalize the ETX when collisions or transmission errors occur. */
-    return;
-  }
-
   stats = nbr_table_get_from_lladdr(link_stats, lladdr);
   if(stats == NULL) {
     /* Add the neighbor */
@@ -151,9 +154,32 @@ link_stats_packet_sent(const linkaddr_t *lladdr, int status, int numtx)
     }
   }
 
+  /* Update total count of TX packets, and total TX send+resend attempts */
+  stats->tx_tot_cnt++;
+  stats->tx_num_sum += numtx;
+  tx_unique++;
+  tx_all += numtx;
+
+  if(status != MAC_TX_OK && status != MAC_TX_NOACK) {
+    /* Do not penalize the ETX when collisions or transmission errors occur. */
+    if(status == MAC_TX_COLLISION)
+      stats->tx_collision++;
+    if(status == MAC_TX_DEFERRED)
+      stats->tx_deferred++;
+    if(status == MAC_TX_ERR || status == MAC_TX_ERR_FATAL)
+      stats->tx_error++;
+    return;
+  }
+
   /* Update last timestamp and freshness */
   stats->last_tx_time = clock_time();
   stats->freshness = MIN(stats->freshness + numtx, FRESHNESS_MAX);
+
+  /* Update successful TX count */
+  if (status == MAC_TX_OK)
+      stats->tx_ok_cnt++;
+  if (status == MAC_TX_NOACK)
+      stats->tx_noack++; 
 
   /* ETX used for this update */
   packet_etx = ((status == MAC_TX_NOACK) ? ETX_NOACK_PENALTY : numtx) * ETX_DIVISOR;
@@ -180,6 +206,8 @@ link_stats_input_callback(const linkaddr_t *lladdr)
       /* Initialize */
       stats->rssi = packet_rssi;
       stats->etx = LINK_STATS_INIT_ETX(stats);
+      stats->rx_bytes += packetbuf_totlen();
+      stats->rx++;
     }
     return;
   }
@@ -187,6 +215,8 @@ link_stats_input_callback(const linkaddr_t *lladdr)
   /* Update RSSI EWMA */
   stats->rssi = ((int32_t)stats->rssi * (EWMA_SCALE - EWMA_ALPHA) +
       (int32_t)packet_rssi * EWMA_ALPHA) / EWMA_SCALE;
+  stats->rx_bytes += packetbuf_totlen();
+  stats->rx++;
 }
 /*---------------------------------------------------------------------------*/
 /* Periodic timer called every FRESHNESS_HALF_LIFE minutes */
@@ -209,3 +239,144 @@ link_stats_init(void)
   ctimer_set(&periodic_timer, 60 * (clock_time_t)CLOCK_SECOND * FRESHNESS_HALF_LIFE,
       periodic, NULL);
 }
+/*---------------------------------------------------------------------------*/
+void
+print_link_stats(void)
+{
+  struct link_stats *stats;
+  linkaddr_t *lladdr;
+  linkaddr_t local_lladdr = {{0}};
+  uint32_t sum_rx = 0;
+  uint32_t sum_rxb = 0;
+  
+  for(stats = nbr_table_head(link_stats); stats != NULL; stats = nbr_table_next(link_stats, stats)) {
+    //void *key = key_from_item(link_stats, stats);
+    lladdr = nbr_table_get_lladdr(link_stats, stats);
+    if (lladdr == NULL) { 
+      //printf("LLADDR: NULL\n");
+    } else if (linkaddr_cmp(lladdr, &local_lladdr)) {
+      //printf("LLADDR: LOCAL\n");
+      //printf("0000 ");
+      printf("00 ");
+      printf("cnt: %lu sum: %lu ok: %lu col: %lu noack: %lu defer: %lu err: %lu rxb: %lu rx: %lu rssi: %u etx: %u\n",
+        stats->tx_tot_cnt, stats->tx_num_sum, stats->tx_ok_cnt, stats->tx_collision,
+        stats->tx_noack, stats->tx_deferred, stats->tx_error, stats->rx_bytes, stats->rx, stats->rssi, stats->etx);
+      sum_rx+=stats->rx;
+      sum_rxb+=stats->rx_bytes;
+    } else {
+      uip_lladdr_t *addr = (uip_lladdr_t *) lladdr;
+/*
+      unsigned int i;
+      for(i = 0; i < LINKADDR_SIZE; i++) {
+        if(i > 0) {
+          printf(":");
+        }
+        printf("%02x", addr->addr[i]);
+      }
+      printf("\n");
+*/
+//      printf("%x%02x ", addr->addr[LINKADDR_SIZE-2], addr->addr[LINKADDR_SIZE-1]);
+      printf("%02x ", addr->addr[LINKADDR_SIZE-1]);
+      printf("cnt: %lu sum: %lu ok: %lu col: %lu noack: %lu defer: %lu err: %lu rxb: %lu rx: %lu rssi: %d etx: %u\n",
+        stats->tx_tot_cnt, stats->tx_num_sum, stats->tx_ok_cnt, stats->tx_collision,
+        stats->tx_noack, stats->tx_deferred, stats->tx_error, stats->rx_bytes, stats->rx, stats->rssi, stats->etx);
+      sum_rx+=stats->rx;
+      sum_rxb+=stats->rx_bytes;
+    }
+  }
+  printf("tx_unique: %lu tx_all: %lu tx_rexmit: %lu rx: %lu rxb: %lu\n", tx_unique, tx_all, tx_all-tx_unique, sum_rx, sum_rxb);
+}
+/*---------------------------------------------------------------------------*/
+#if SINK_ADDITION || SENSOR_PRINT
+void
+calculate_traffic_metric(void)
+{
+  struct link_stats *stats;
+  linkaddr_t *lladdr;
+  linkaddr_t local_lladdr = {{0}};
+  uint32_t highest_rx = 0;
+  uint32_t sum_rx = 0;
+  uint32_t ctr_highest_nbr = 0;
+  uint32_t ctr_rx = 0;
+
+  for(stats = nbr_table_head(link_stats); stats != NULL; stats = nbr_table_next(link_stats, stats)) {
+    lladdr = nbr_table_get_lladdr(link_stats, stats);
+    if (lladdr == NULL) {
+      printf("LLADDR: NULL\n");
+    } else if (linkaddr_cmp(lladdr, &local_lladdr)) {
+      printf("LLADDR: LOCAL\n");
+    } else {
+/*
+      uip_lladdr_t *addr = (uip_lladdr_t *) lladdr;
+      printf("%x%02x ", addr->addr[LINKADDR_SIZE-2], addr->addr[LINKADDR_SIZE-1]);
+*/
+      if (highest_rx < (stats->rx_bytes-stats->rx_bytes_last)) {
+        highest_rx = stats->rx_bytes-stats->rx_bytes_last;
+      }	
+      sum_rx += (stats->rx_bytes-stats->rx_bytes_last);
+      stats->rx_bytes_last = stats->rx_bytes;
+
+      if (ctr_highest_nbr < (stats->rx-stats->rx_last)) {
+        ctr_highest_nbr = stats->rx-stats->rx_last;
+      }	
+      ctr_rx += stats->rx-stats->rx_last;
+      stats->rx_last = stats->rx;
+      	
+    }
+  }
+  rx_sum = sum_rx;
+  rx_highest = highest_rx;
+  nbr_highest_ctr = ctr_highest_nbr;
+  rx_ctr = ctr_rx;
+/*
+  if (default_instance != NULL) {
+    default_instance->received_traffic = sum_rx;
+    default_instance->highest_traffic = highest_rx;
+    printf("received_traffic: %lu highest_traffic: %lu\n", sum_rx, highest_rx);
+  }
+*/
+}
+/*---------------------------------------------------------------------------*/
+uint32_t
+get_received_traffic(void)
+{
+  return rx_sum;
+}
+/*---------------------------------------------------------------------------*/
+uint32_t
+get_highest_traffic(void)
+{
+  return rx_highest;
+}
+/*---------------------------------------------------------------------------*/
+uint32_t
+get_rx(void)
+{
+  return rx_ctr;
+}
+/*---------------------------------------------------------------------------*/
+uint32_t
+get_nbr_highest(void)
+{
+  return nbr_highest_ctr;
+}
+/*---------------------------------------------------------------------------*/
+uint32_t
+get_tx_unique(void)
+{
+  return tx_unique;
+}
+/*---------------------------------------------------------------------------*/
+uint32_t
+get_tx_all(void)
+{
+  return tx_all;
+}
+/*---------------------------------------------------------------------------*/
+uint32_t
+get_tx_rexmit(void)
+{
+  return tx_all-tx_unique;
+}
+#endif
+/*---------------------------------------------------------------------------*/

@@ -48,6 +48,17 @@ struct link_stats {
   int16_t rssi;               /* RSSI (received signal strength) */
   uint8_t freshness;          /* Freshness of the statistics */
   clock_time_t last_tx_time;  /* Last Tx timestamp */
+  uint32_t tx_tot_cnt;        /* Count of total TX packets */
+  uint32_t tx_num_sum;        /* Sum of all TX send+resend attempts */
+  uint32_t tx_ok_cnt;         /* Count of successfully TX:ed packets */
+  uint32_t tx_collision;      /* Counf of MAC_TX_COLLISION */
+  uint32_t tx_noack;          /* Counf of MAC_TX_NOACK */
+  uint32_t tx_deferred;       /* Counf of MAC_TX_DEFERRED */
+  uint32_t tx_error;          /* Counf of TX error */
+  uint32_t rx;                /* Counf of RX packets */
+  uint32_t rx_last;           /* Last RX packets used */
+  uint32_t rx_bytes;          /* Counf of RX bytes */
+  uint32_t rx_bytes_last;     /* Last RX bytes used for traffic metric */
 };
 
 /* Returns the neighbor's link statistics */
@@ -61,5 +72,18 @@ void link_stats_init(void);
 void link_stats_packet_sent(const linkaddr_t *lladdr, int status, int numtx);
 /* Packet input callback. Updates statistics for receptions on a given link */
 void link_stats_input_callback(const linkaddr_t *lladdr);
+
+void print_link_stats(void);
+#if SINK_ADDITION || SENSOR_PRINT
+void calculate_traffic_metric(void);
+uint32_t get_received_traffic(void);
+uint32_t get_highest_traffic(void);
+uint32_t get_rx(void);
+uint32_t get_nbr_highest(void);
+uint32_t get_tx_unique(void);
+uint32_t get_tx_all(void);
+uint32_t get_tx_rexmit(void);
+#endif 
+
 
 #endif /* LINK_STATS_H_ */
