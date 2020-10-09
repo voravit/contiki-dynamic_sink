@@ -58,7 +58,30 @@ struct powertrace_sniff_stats {
   unsigned long last_input_txtime, last_input_rxtime;
   unsigned long last_output_txtime, last_output_rxtime;
 };
+/*---------------------------------------------------------------------------*/
+#if SINK_ADDITION || SENSOR_PRINT /* for wismote */
+#include "net/rpl/rpl-private.h"
+#define CPU 2.2
+#define LPM 0.0018
+#define RX 18.5
+#define TX 33.6
+/*
+#else // for SKY 
+#define CPU 1.8
+#define LPM 0.0545
+#define RX 20
+#define TX 17.7
+*/
+#define ENERGY_BUDGET 21600000
+#define UPLINK_VOLTAGE 3.8
+#define UPLINK_CURRENT 143.22
+  static unsigned long long remain = ENERGY_BUDGET;
+  static unsigned long long total = 0;
+#endif
 
+#define VOLTAGE 3
+#define TICK_SECOND 32768
+/*---------------------------------------------------------------------------*/
 #define INPUT  1
 #define OUTPUT 0
 
@@ -84,6 +107,10 @@ powertrace_print(char *str)
 
   unsigned long time, all_time, radio, all_radio;
   
+#if SINK_ADDITION || SENSOR_PRINT
+  unsigned long long pwr_cpu, pwr_radio;
+#endif
+
   struct powertrace_sniff_stats *s;
 
   energest_flush();
@@ -115,11 +142,56 @@ powertrace_print(char *str)
   all_radio = energest_type_time(ENERGEST_TYPE_LISTEN) +
     energest_type_time(ENERGEST_TYPE_TRANSMIT);
 
-  printf("%s %lu P %d.%d %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu (radio %d.%02d%% / %d.%02d%% tx %d.%02d%% / %d.%02d%% listen %d.%02d%% / %d.%02d%%)\n",
-         str,
-         clock_time(), linkaddr_node_addr.u8[0], linkaddr_node_addr.u8[1], seqno,
+//#if (SINK_ADDITION == 3)
+#if SINK_ADDITION || SENSOR_PRINT
+//pwr_cpu =  ((unsigned long long)((all_cpu*CPU)+(all_lpm*LPM))*VOLTAGE*100)/TICK_SECOND;
+//pwr_radio =  ((unsigned long long)((all_listen*RX)+(all_transmit*TX))*VOLTAGE*100)/TICK_SECOND;
+pwr_cpu =  ((unsigned long long)((cpu*CPU)+(lpm*LPM))*VOLTAGE)/TICK_SECOND;
+#if SINK_ADDITION 
+if (get_operate_mode() > OPERATE_AS_SENSOR) {
+pwr_radio =  ((unsigned long long) (((listen*RX)+(transmit*TX))*VOLTAGE + ((listen+transmit)*UPLINK_CURRENT*UPLINK_VOLTAGE)))/TICK_SECOND;
+total = total + (pwr_cpu+pwr_radio);
+    printf("%s %lu P %x%02x %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %llu %llu 1 %llu\n", 
+         str, clock_time(), linkaddr_node_addr.u8[LINKADDR_SIZE - 2], linkaddr_node_addr.u8[LINKADDR_SIZE - 1], seqno,
          all_cpu, all_lpm, all_transmit, all_listen, all_idle_transmit, all_idle_listen,
          cpu, lpm, transmit, listen, idle_transmit, idle_listen,
+         time, all_time, radio, all_radio, pwr_cpu, pwr_radio, total);
+} else {
+pwr_radio =  ((unsigned long long) (((listen*RX)+(transmit*TX))*VOLTAGE))/TICK_SECOND;
+total = total + (pwr_cpu+pwr_radio);
+    printf("%s %lu P %x%02x %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %llu %llu 0 %llu\n", 
+         str, clock_time(), linkaddr_node_addr.u8[LINKADDR_SIZE - 2], linkaddr_node_addr.u8[LINKADDR_SIZE - 1], seqno,
+         all_cpu, all_lpm, all_transmit, all_listen, all_idle_transmit, all_idle_listen,
+         cpu, lpm, transmit, listen, idle_transmit, idle_listen,
+         time, all_time, radio, all_radio, pwr_cpu, pwr_radio, total);
+}
+#else
+pwr_radio =  ((unsigned long long) (((listen*RX)+(transmit*TX))*VOLTAGE))/TICK_SECOND;
+total = total + (pwr_cpu+pwr_radio);
+    printf("%s %lu P %x%02x %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %llu %llu 0 %llu\n", 
+         str, clock_time(), linkaddr_node_addr.u8[LINKADDR_SIZE - 2], linkaddr_node_addr.u8[LINKADDR_SIZE - 1], seqno,
+         all_cpu, all_lpm, all_transmit, all_listen, all_idle_transmit, all_idle_listen,
+         cpu, lpm, transmit, listen, idle_transmit, idle_listen,
+         time, all_time, radio, all_radio, pwr_cpu, pwr_radio, total);
+#endif
+//printf("ENR:LLU: %llu ", ((((ENERGY_BUDGET*100)-(pwr_cpu+pwr_radio))*100)/ENERGY_BUDGET));
+//printf("LU: %lu\n", (uint32_t) ((((ENERGY_BUDGET*100)-(pwr_cpu+pwr_radio))*100)/ENERGY_BUDGET)); 
+//update_energy_metric((uint32_t) ((((ENERGY_BUDGET*100)-(pwr_cpu+pwr_radio))*100)/ENERGY_BUDGET));
+remain = remain - (pwr_cpu+pwr_radio);
+update_energy_metric((uint32_t) (((remain/1000)*100*100)/(ENERGY_BUDGET/1000)));
+#else
+//pwr_cpu =  (unsigned long)((all_cpu*CPU)+(all_lpm*LPM))*VOLTAGE/TICK_SECOND;
+//pwr_radio =  (unsigned long)((all_listen*RX)+(all_transmit*TX))*VOLTAGE/TICK_SECOND;
+    printf("%s %lu P %x%02x %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu 0\n", 
+         str, clock_time(), linkaddr_node_addr.u8[LINKADDR_SIZE - 2], linkaddr_node_addr.u8[LINKADDR_SIZE - 1], seqno,
+         all_cpu, all_lpm, all_transmit, all_listen, all_idle_transmit, all_idle_listen,
+         cpu, lpm, transmit, listen, idle_transmit, idle_listen,
+         time, all_time, radio, all_radio, (unsigned long)0, (unsigned long)0);
+//         ((unsigned long)((all_cpu*CPU)+(all_lpm*LPM))*VOLTAGE)/TICK_SECOND,
+//         ((unsigned long)((all_listen*RX)+(all_transmit*TX))*VOLTAGE)/TICK_SECOND);
+#endif
+
+/*
          (int)((100L * (all_transmit + all_listen)) / all_time),
          (int)((10000L * (all_transmit + all_listen) / all_time) - (100L * (all_transmit + all_listen) / all_time) * 100),
          (int)((100L * (transmit + listen)) / time),
@@ -132,7 +204,7 @@ powertrace_print(char *str)
          (int)((10000L * all_listen) / all_time - (100L * all_listen / all_time) * 100),
          (int)((100L * listen) / time),
          (int)((10000L * listen) / time - (100L * listen / time) * 100));
-
+*/
   for(s = list_head(stats_list); s != NULL; s = list_item_next(s)) {
 
 #if ! NETSTACK_CONF_WITH_IPV6
@@ -207,7 +279,7 @@ PROCESS_THREAD(powertrace_process, ev, data)
   while(1) {
     PROCESS_WAIT_UNTIL(etimer_expired(&periodic));
     etimer_reset(&periodic);
-    powertrace_print("");
+    powertrace_print("PWR");
   }
 
   PROCESS_END();
