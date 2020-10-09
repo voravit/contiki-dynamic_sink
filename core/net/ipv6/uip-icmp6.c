@@ -48,6 +48,7 @@
 #include "contiki-default-conf.h"
 
 #define DEBUG 0
+//#define DEBUG 1
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -280,6 +281,87 @@ uip_icmp6_send(const uip_ipaddr_t *dest, int type, int code, int payload_len)
 
   memcpy(&UIP_IP_BUF->destipaddr, dest, sizeof(*dest));
   uip_ds6_select_src(&UIP_IP_BUF->srcipaddr, &UIP_IP_BUF->destipaddr);
+
+PRINTF("DEST: ");
+PRINT6ADDR(&UIP_IP_BUF->destipaddr);
+PRINTF("\n");
+PRINTF("SRC: ");
+PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
+PRINTF("\n");
+
+  UIP_ICMP_BUF->type = type;
+  UIP_ICMP_BUF->icode = code;
+
+  UIP_ICMP_BUF->icmpchksum = 0;
+  UIP_ICMP_BUF->icmpchksum = ~uip_icmp6chksum();
+
+  uip_len = UIP_IPH_LEN + UIP_ICMPH_LEN + payload_len;
+
+  UIP_STAT(++uip_stat.icmp.sent);
+  UIP_STAT(++uip_stat.ip.sent);
+
+  tcpip_ipv6_output();
+}
+/*---------------------------------------------------------------------------*/
+#if SINK_ADDITION
+void
+uip_icmp6_send_src(const uip_ipaddr_t *src, const uip_ipaddr_t *dest, int type, int code, int payload_len)
+{
+
+  UIP_IP_BUF->vtc = 0x60;
+  UIP_IP_BUF->tcflow = 0;
+  UIP_IP_BUF->flow = 0;
+  UIP_IP_BUF->proto = UIP_PROTO_ICMP6;
+  UIP_IP_BUF->ttl = uip_ds6_if.cur_hop_limit;
+  UIP_IP_BUF->len[0] = (UIP_ICMPH_LEN + payload_len) >> 8;
+  UIP_IP_BUF->len[1] = (UIP_ICMPH_LEN + payload_len) & 0xff;
+
+  memcpy(&UIP_IP_BUF->destipaddr, dest, sizeof(*dest));
+  memcpy(&UIP_IP_BUF->srcipaddr, src, sizeof(*src));
+
+PRINTF("DEST: ");
+PRINT6ADDR(&UIP_IP_BUF->destipaddr);
+PRINTF("\n");
+PRINTF("SRC: ");
+PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
+PRINTF("\n");
+
+  UIP_ICMP_BUF->type = type;
+  UIP_ICMP_BUF->icode = code;
+
+  UIP_ICMP_BUF->icmpchksum = 0;
+  UIP_ICMP_BUF->icmpchksum = ~uip_icmp6chksum();
+
+  uip_len = UIP_IPH_LEN + UIP_ICMPH_LEN + payload_len;
+
+  UIP_STAT(++uip_stat.icmp.sent);
+  UIP_STAT(++uip_stat.ip.sent);
+
+  tcpip_ipv6_output();
+}
+#endif
+/*---------------------------------------------------------------------------*/
+void
+uip_icmp6_send_ttl(const uip_ipaddr_t *dest, int type, int code, int payload_len, int ttl)
+{
+
+  UIP_IP_BUF->vtc = 0x60;
+  UIP_IP_BUF->tcflow = 0;
+  UIP_IP_BUF->flow = 0;
+  UIP_IP_BUF->proto = UIP_PROTO_ICMP6;
+  UIP_IP_BUF->ttl = ttl;
+  UIP_IP_BUF->len[0] = (UIP_ICMPH_LEN + payload_len) >> 8;
+  UIP_IP_BUF->len[1] = (UIP_ICMPH_LEN + payload_len) & 0xff;
+
+  memcpy(&UIP_IP_BUF->destipaddr, dest, sizeof(*dest));
+  uip_ds6_select_src(&UIP_IP_BUF->srcipaddr, &UIP_IP_BUF->destipaddr);
+
+PRINTF("DEST: ");
+PRINT6ADDR(&UIP_IP_BUF->destipaddr);
+PRINTF("\n");
+PRINTF("SRC: ");
+PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
+PRINTF("\n");
 
   UIP_ICMP_BUF->type = type;
   UIP_ICMP_BUF->icode = code;
