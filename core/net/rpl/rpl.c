@@ -50,7 +50,8 @@
 #include "net/rpl/rpl-ns.h"
 #include "net/ipv6/multicast/uip-mcast6.h"
 
-#define DEBUG DEBUG_NONE
+//#define DEBUG DEBUG_NONE
+#define DEBUG DEBUG_PRINT
 #include "net/ip/uip-debug.h"
 
 #include <limits.h>
@@ -59,6 +60,74 @@
 #if RPL_CONF_STATS
 rpl_stats_t rpl_stats;
 #endif
+
+#ifdef ROOT_VIRTUAL
+#include "contiki-net.h"
+#endif
+/* functions for coordinated sinks */
+#if (SINK_ADDITION == 3)
+static uip_ipaddr_t coordinator_addr;
+/*---------------------------------------------------------------------------*/
+uip_ipaddr_t *
+get_coordinator_addr(void)
+{
+  return &coordinator_addr;
+}
+/*---------------------------------------------------------------------------*/
+void
+set_coordinator_addr(void)
+{
+  if (uiplib_ip6addrconv(RPL_COORDINATOR_IP_ADDR, &coordinator_addr) == 0) {
+    printf("ERROR: Cannot set coordinator address\n");
+  }
+}
+/*---------------------------------------------------------------------------*/
+#endif /* SINK_ADDITION == 3 */
+
+/* common functions for candidate sink */
+#if SINK_ADDITION
+static uip_ipaddr_t vr_addr;
+static enum operate_mode current_operate_mode = OPERATE_AS_SENSOR;
+/*---------------------------------------------------------------------------*/
+uip_ipaddr_t *
+get_vr_addr(void)
+{
+  return &vr_addr;
+}
+/*---------------------------------------------------------------------------*/
+void
+set_vr_addr(void)
+{
+#ifdef ROOT_VIRTUAL
+  if (uiplib_ip6addrconv(RPL_VIRTUAL_ROOT_IP_ADDR, &vr_addr) == 0) {
+    printf("ERROR: Cannot set coordinator address\n");
+  }
+#else
+  static uip_ds6_addr_t *locaddr;
+
+  for(locaddr = uip_ds6_if.addr_list;
+      locaddr < uip_ds6_if.addr_list + UIP_DS6_ADDR_NB; locaddr++) {
+    if(locaddr->isused && !(uip_is_addr_linklocal(&locaddr->ipaddr))) {
+      uip_ipaddr_copy(&vr_addr, &locaddr->ipaddr);
+      break;
+    }
+  }
+#endif
+}
+/*---------------------------------------------------------------------------*/
+enum operate_mode
+get_operate_mode(void)
+{
+  return current_operate_mode;
+}
+/*---------------------------------------------------------------------------*/
+void
+set_operate_mode(enum operate_mode m)
+{
+  current_operate_mode = m;
+}
+/*---------------------------------------------------------------------------*/
+#endif /* SINK_ADDITION */
 
 static enum rpl_mode mode = RPL_MODE_MESH;
 /*---------------------------------------------------------------------------*/
@@ -81,7 +150,7 @@ rpl_set_mode(enum rpl_mode m)
        inform our parent that we now are reachable. Before we do this,
        we must set the mode variable, since DAOs will not be sent if
        we are in feather mode. */
-    PRINTF("RPL: switching to mesh mode\n");
+    //PRINTF("RPL: switching to mesh mode\n");
     mode = m;
 
     if(default_instance != NULL) {
@@ -89,15 +158,15 @@ rpl_set_mode(enum rpl_mode m)
     }
   } else if(m == RPL_MODE_FEATHER) {
 
-    PRINTF("RPL: switching to feather mode\n");
+    //PRINTF("RPL: switching to feather mode\n");
     if(default_instance != NULL) {
-      PRINTF("RPL: rpl_set_mode: RPL sending DAO with zero lifetime\n");
+      //PRINTF("RPL: rpl_set_mode: RPL sending DAO with zero lifetime\n");
       if(default_instance->current_dag != NULL) {
         dao_output(default_instance->current_dag->preferred_parent, RPL_ZERO_LIFETIME);
       }
       rpl_cancel_dao(default_instance);
     } else {
-      PRINTF("RPL: rpl_set_mode: no default instance\n");
+      //PRINTF("RPL: rpl_set_mode: no default instance\n");
     }
 
     mode = m;
@@ -143,17 +212,22 @@ rpl_purge_routes(void)
       uip_ipaddr_copy(&prefix, &r->ipaddr);
       uip_ds6_route_rm(r);
       r = uip_ds6_route_head();
-      PRINTF("RPL: No more routes to ");
+      //PRINTF("RPL: No more routes to ");
+PRINTF("%lu ", clock_time());
+PRINTF("ROUTE REMOVE: ");
       PRINT6ADDR(&prefix);
+PRINTF("\n");
+if (default_instance != NULL) {
       dag = default_instance->current_dag;
       /* Propagate this information with a No-Path DAO to preferred parent if we are not a RPL Root */
       if(dag->rank != ROOT_RANK(default_instance)) {
-        PRINTF(" -> generate No-Path DAO\n");
+        //PRINTF(" -> generate No-Path DAO\n");
         dao_output_target(dag->preferred_parent, &prefix, RPL_ZERO_LIFETIME);
         /* Don't schedule more than 1 No-Path DAO, let next iteration handle that */
         return;
       }
-      PRINTF("\n");
+      //PRINTF("\n");
+} 
     } else {
       r = uip_ds6_route_next(r);
     }
@@ -221,7 +295,7 @@ rpl_remove_routes_by_nexthop(uip_ipaddr_t *nexthop, rpl_dag_t *dag)
     }
     r = uip_ds6_route_next(r);
   }
-  ANNOTATE("#L %u 0\n", nexthop->u8[sizeof(uip_ipaddr_t) - 1]);
+//  ANNOTATE("#L %u 0\n", nexthop->u8[sizeof(uip_ipaddr_t) - 1]);
 }
 /*---------------------------------------------------------------------------*/
 uip_ds6_route_t *
@@ -231,7 +305,7 @@ rpl_add_route(rpl_dag_t *dag, uip_ipaddr_t *prefix, int prefix_len,
   uip_ds6_route_t *rep;
 
   if((rep = uip_ds6_route_add(prefix, prefix_len, next_hop)) == NULL) {
-    PRINTF("RPL: No space for more route entries\n");
+    //PRINTF("RPL: No space for more route entries\n");
     return NULL;
   }
 
@@ -240,11 +314,15 @@ rpl_add_route(rpl_dag_t *dag, uip_ipaddr_t *prefix, int prefix_len,
   /* always clear state flags for the no-path received when adding/refreshing */
   RPL_ROUTE_CLEAR_NOPATH_RECEIVED(rep);
 
-  PRINTF("RPL: Added a route to ");
+  //PRINTF("RPL: Added a route to ");
+PRINTF("%lu ", clock_time());
+PRINTF("ROUTE ADD: ");
   PRINT6ADDR(prefix);
-  PRINTF("/%d via ", prefix_len);
-  PRINT6ADDR(next_hop);
-  PRINTF("\n");
+  //PRINTF("/%d via ", prefix_len);
+//PRINTF(" NEXTHOP: ");
+//  PRINT6ADDR(next_hop);
+PRINTF("\n");
+  //PRINTF("\n");
 
   return rep;
 }
@@ -265,7 +343,7 @@ rpl_link_neighbor_callback(const linkaddr_t *addr, int status, int numtx)
       parent = rpl_find_parent_any_dag(instance, &ipaddr);
       if(parent != NULL) {
         /* Trigger DAG rank recalculation. */
-        PRINTF("RPL: rpl_link_neighbor_callback triggering update\n");
+        //PRINTF("RPL: rpl_link_neighbor_callback triggering update\n");
         parent->flags |= RPL_PARENT_FLAG_UPDATED;
       }
     }
@@ -279,12 +357,12 @@ rpl_ipv6_neighbor_callback(uip_ds6_nbr_t *nbr)
   rpl_instance_t *instance;
   rpl_instance_t *end;
 
-  PRINTF("RPL: Neighbor state changed for ");
-  PRINT6ADDR(&nbr->ipaddr);
+  //PRINTF("RPL: Neighbor state changed for ");
+//  PRINT6ADDR(&nbr->ipaddr);
 #if UIP_ND6_SEND_NS || UIP_ND6_SEND_RA
-  PRINTF(", nscount=%u, state=%u\n", nbr->nscount, nbr->state);
+  //PRINTF(", nscount=%u, state=%u\n", nbr->nscount, nbr->state);
 #else /* UIP_ND6_SEND_NS || UIP_ND6_SEND_RA */
-  PRINTF(", state=%u\n", nbr->state);
+  //PRINTF(", state=%u\n", nbr->state);
 #endif /* UIP_ND6_SEND_NS || UIP_ND6_SEND_RA */
   for(instance = &instance_table[0], end = instance + RPL_MAX_INSTANCES; instance < end; ++instance) {
     if(instance->used == 1 ) {
@@ -292,7 +370,7 @@ rpl_ipv6_neighbor_callback(uip_ds6_nbr_t *nbr)
       if(p != NULL) {
         p->rank = INFINITE_RANK;
         /* Trigger DAG rank recalculation. */
-        PRINTF("RPL: rpl_ipv6_neighbor_callback infinite rank\n");
+        //PRINTF("RPL: rpl_ipv6_neighbor_callback infinite rank\n");
         p->flags |= RPL_PARENT_FLAG_UPDATED;
       }
     }
@@ -313,9 +391,9 @@ rpl_purge_dags(void)
         if(instance->dag_table[i].used) {
           if(instance->dag_table[i].lifetime == 0) {
             if(!instance->dag_table[i].joined) {
-              PRINTF("RPL: Removing dag ");
-              PRINT6ADDR(&instance->dag_table[i].dag_id);
-              PRINTF("\n");
+              //PRINTF("RPL: Removing dag ");
+              //PRINT6ADDR(&instance->dag_table[i].dag_id);
+              //PRINTF("\n");
               rpl_free_dag(&instance->dag_table[i]);
             }
           } else {
@@ -331,8 +409,17 @@ void
 rpl_init(void)
 {
   uip_ipaddr_t rplmaddr;
-  PRINTF("RPL: RPL started\n");
+  //PRINTF("RPL: RPL started\n");
   default_instance = NULL;
+
+#if (SINK_ADDITION == 3)
+  set_coordinator_addr();
+#endif
+#if SINK_ADDITION
+#ifdef ROOT_VIRTUAL
+  set_vr_addr();
+#endif
+#endif
 
   rpl_dag_init();
   rpl_reset_periodic_timer();
@@ -345,6 +432,17 @@ rpl_init(void)
 #if RPL_CONF_STATS
   memset(&rpl_stats, 0, sizeof(rpl_stats));
 #endif
+
+#if (SINK_ADDITION == 2)
+  init_candidate_sink_list();
+#endif
+/*
+#if (SINK_ADDITION == 1) || SENSOR_PRINT || FIXED_SINK
+  if (status_rpl_metric_timer()==0) {
+    start_rpl_metric_timer();
+  }
+#endif
+*/
 
 #if RPL_WITH_NON_STORING
   rpl_ns_init();

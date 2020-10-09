@@ -261,8 +261,36 @@ struct rpl_instance {
 #if RPL_WITH_DAO_ACK
   struct ctimer dao_retransmit_timer;
 #endif /* RPL_WITH_DAO_ACK */
+#if SINK_ADDITION
+  uint8_t tree_size;
+  uint8_t longest_hop;
+#endif
+#if SINK_ADDITION || SENSOR_PRINT
+  uint32_t received_traffic;
+  uint32_t highest_traffic;
+  uint32_t energy;
+#endif
+};
+/*---------------------------------------------------------------------------*/
+#if (SINK_ADDITION == 3)
+uip_ipaddr_t *get_coordinator_addr(void);
+void set_coorinator_addr(void);
+#endif
+
+#if SINK_ADDITION
+uip_ipaddr_t *get_vr_addr(void);
+void set_vr_addr(void);
+
+enum operate_mode {
+  OPERATE_AS_SENSOR = 0,
+  OPERATE_AS_SINK_AUTONOMOUS = 1,
+  OPERATE_AS_SINK_UNCOORDINATED = 2,
+  OPERATE_AS_SINK_COORDINATED = 3,
 };
 
+enum operate_mode get_operate_mode(void);
+void set_operate_mode(enum operate_mode m);
+#endif
 /*---------------------------------------------------------------------------*/
 /* Public RPL functions. */
 void rpl_init(void);
@@ -293,6 +321,12 @@ uip_ds6_nbr_t *rpl_get_nbr(rpl_parent_t *parent);
 void rpl_print_neighbor_list(void);
 int rpl_process_srh_header(void);
 int rpl_srh_get_next_hop(uip_ipaddr_t *ipaddr);
+#if SINK_ADDITION || SENSOR_PRINT
+void rpl_calculate_traffic_metric(void);
+#endif 
+#if SINK_ADDITION 
+uip_ipaddr_t *rpl_get_src_addr(void);
+#endif 
 
 /* Per-parent RPL information */
 NBR_TABLE_DECLARE(rpl_parents);

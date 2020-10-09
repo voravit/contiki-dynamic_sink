@@ -50,7 +50,8 @@
 
 #if RPL_WITH_NON_STORING
 
-#define DEBUG DEBUG_NONE
+#define DEBUG DEBUG_PRINT
+//#define DEBUG DEBUG_NONE
 #include "net/ip/uip-debug.h"
 
 #include <limits.h>
@@ -99,7 +100,11 @@ rpl_ns_is_node_reachable(const rpl_dag_t *dag, const uip_ipaddr_t *addr)
 {
   int max_depth = RPL_NS_LINK_NUM;
   rpl_ns_node_t *node = rpl_ns_get_node(dag, addr);
+#ifdef ROOT_VIRTUAL
+  rpl_ns_node_t *root_node = rpl_ns_get_node(dag, dag != NULL ? rpl_get_src_addr() : NULL);
+#else
   rpl_ns_node_t *root_node = rpl_ns_get_node(dag, dag != NULL ? &dag->dag_id : NULL);
+#endif
   while(node != NULL && node != root_node && max_depth > 0) {
     node = node->parent;
     max_depth--;
@@ -166,6 +171,11 @@ rpl_ns_update_node(rpl_dag_t *dag, const uip_ipaddr_t *child, const uip_ipaddr_t
   } else {
     child_node->parent = parent_node;
   }
+
+PRINTF("%lu ", clock_time());
+PRINTF("ROUTE ADD: ");
+PRINT6ADDR(child);
+PRINTF("\n");
 
   return child_node;
 }

@@ -105,6 +105,44 @@ handle_periodic_timer(void *ptr)
   ctimer_reset(&periodic_timer);
 }
 /*---------------------------------------------------------------------------*/
+#if (SINK_ADDITION >= 2)
+static uint8_t reset_request = 0;
+static struct ctimer metric_timer;
+/*---------------------------------------------------------------------------*/
+uint8_t
+sent_reset_topology_dependent_metric(void)
+{
+  return reset_request;
+}
+/*---------------------------------------------------------------------------*/
+static void
+reset_topology_dependent_metric(void *ptr)
+{
+  if (default_instance != NULL) {
+    default_instance->tree_size = 0;
+    default_instance->longest_hop = 0;
+  }
+  reset_request = 0;
+}
+/*---------------------------------------------------------------------------*/
+void
+schedule_reset_topology_dependent_metric(void)
+{
+  ctimer_set(&metric_timer, 3*60*CLOCK_SECOND, reset_topology_dependent_metric, NULL);
+  reset_request = 1;
+}
+#endif /* SINK_ADDITION */
+/*---------------------------------------------------------------------------*/
+static void
+handle_unicast_dio_timer(void *ptr)
+{
+  rpl_instance_t *instance = (rpl_instance_t *)ptr;
+  uip_ipaddr_t *target_ipaddr = rpl_get_parent_ipaddr(instance->unicast_dio_target);
+
+  if(target_ipaddr != NULL) {
+    dio_output(instance, target_ipaddr);
+  }
+}
 static void
 new_dio_interval(rpl_instance_t *instance)
 {
@@ -160,6 +198,12 @@ handle_dio_timer(void *ptr)
   rpl_instance_t *instance;
 
   instance = (rpl_instance_t *)ptr;
+
+#if (SINK_ADDITION == 3)
+  if ((get_operate_mode() > OPERATE_AS_SENSOR)&&(!get_register_acked())) {
+    dis_register_output(NULL, instance->current_dag->rank, (uint16_t)uip_ds6_nbr_num());
+  }
+#endif /* SINK_ADDITION == 3 */
 
   PRINTF("RPL: DIO Timer triggered\n");
   if(!dio_send_ok) {
@@ -356,17 +400,6 @@ rpl_cancel_dao(rpl_instance_t *instance)
 {
   ctimer_stop(&instance->dao_timer);
   ctimer_stop(&instance->dao_lifetime_timer);
-}
-/*---------------------------------------------------------------------------*/
-static void
-handle_unicast_dio_timer(void *ptr)
-{
-  rpl_instance_t *instance = (rpl_instance_t *)ptr;
-  uip_ipaddr_t *target_ipaddr = rpl_get_parent_ipaddr(instance->unicast_dio_target);
-
-  if(target_ipaddr != NULL) {
-    dio_output(instance, target_ipaddr);
-  }
 }
 /*---------------------------------------------------------------------------*/
 void
